@@ -64,6 +64,8 @@ MQTTConnectionManager::MQTTConnectionManager(QWidget* parent) : QWidget(parent) 
 	connect(m_pcbProtocol, &QComboBox::currentIndexChanged, this, [this] (int ind) {
 		m_protocolVersion = static_cast<QMqttClient::ProtocolVersion>(ind + 3);
 	});
+
+	resize(500, 400);
 }
 
 void MQTTConnectionManager::onBtnConnectClick() {
