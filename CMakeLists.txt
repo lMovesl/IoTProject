@@ -3,7 +3,7 @@
 set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" 
     CACHE STRING "Vcpkg toolchain file")
 
-project(CMakeProject2 VERSION 1.0 LANGUAGES CXX)
+project(IOTProject VERSION 1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,21 +17,20 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 find_package(Qt6 REQUIRED COMPONENTS Mqtt)
 find_package(OpenSSL REQUIRED)
 
-
 qt_standard_project_setup()
 
-qt_add_executable(CMakeProject2
-    "CMakeProject2.cpp" "CMakeProject2.h"
+qt_add_executable(IOTProject
+    "main.cpp"
     "MQTTConnectionManager.cpp" "MQTTConnectionManager.h"
 )
 
-target_link_libraries(CMakeProject2 PRIVATE Qt6::Widgets)
-target_link_libraries(CMakeProject2 PRIVATE Qt6::Mqtt)
-target_link_libraries(CMakeProject2 PRIVATE OpenSSL::SSL)
-target_link_libraries(CMakeProject2 PRIVATE OpenSSL::Crypto)
+target_link_libraries(IOTProject PRIVATE Qt6::Widgets)
+target_link_libraries(IOTProject PRIVATE Qt6::Mqtt)
+target_link_libraries(IOTProject PRIVATE OpenSSL::SSL)
+target_link_libraries(IOTProject PRIVATE OpenSSL::Crypto)
 
 if (MSVC) 
-    target_compile_options(CMakeProject2 PRIVATE
+    target_compile_options(IOTProject PRIVATE
         /W3
         /MP
         /WX
@@ -44,9 +43,9 @@ endif()
 
 if (WIN32)
 
-    add_custom_command(TARGET CMakeProject2 POST_BUILD
+    add_custom_command(TARGET IOTProject POST_BUILD
         COMMAND "${Qt6_BIN_DIR}/windeployqt.exe" 
-                "$<TARGET_FILE:CMakeProject2>"
+                "$<TARGET_FILE:IOTProject>"
 
         COMMENT "Deploying Qt DLLs with windeployqt..."
 

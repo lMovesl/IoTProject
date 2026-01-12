@@ -58,6 +58,9 @@ MQTTConnectionManager::MQTTConnectionManager(QWidget* parent) : QWidget(parent) 
 	connect(m_pcbProtocol, &QComboBox::currentIndexChanged, this, [this] (int ind) {
 		m_protocolVersion = static_cast<QMqttClient::ProtocolVersion>(ind + 3);
 	});
+	connect(m_pmqttClient, &QMqttClient::errorChanged, this, [this](QMqttClient::ClientError error) {
+			m_ppteLogMessages->appendPlainText("MQTT error: " + QString::number(error));
+	});
 
 	m_ppteLogMessages->setReadOnly(true);
 	m_pcbProtocol->addItems({
@@ -90,6 +93,7 @@ void MQTTConnectionManager::onBtnConnectClick() {
 //			m_pmqttClient->connectToH
 #if !defined(QT_NO_SSL)
 		if (m_bSecure)
+			//broker.hivemq.com 8883
 			m_pmqttClient->connectToHostEncrypted({});
 #endif
 		if (!m_bSecure)
