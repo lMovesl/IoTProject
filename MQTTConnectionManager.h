@@ -38,4 +38,4 @@ public slots:
 	void setClientPort(int port);
 };
 
-#endif MQTT_CONNECTION_MANAGER_H	
+#endif //MQTT_CONNECTION_MANAGER_H	
