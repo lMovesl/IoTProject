@@ -5,6 +5,7 @@
 #include <QDateTime>
 #include <QMessageBox>
 #include <QGroupBox>
+#include <QMetaEnum>
 
 MQTTConnectionManager::MQTTConnectionManager(QWidget* parent) : QWidget(parent) {
 	m_pmqttClient = new QMqttClient(this);
@@ -12,7 +13,9 @@ MQTTConnectionManager::MQTTConnectionManager(QWidget* parent) : QWidget(parent) 
 	QLabel* lblPort = new QLabel("Port", this);
 	QLabel* lblTopicName = new QLabel("Topic name", this);
 	QLabel* lblLogMessages = new QLabel("Log messages", this);
-	QLabel* lblProtocol = new QLabel("protocol", this);
+	QLabel* lblProtocol = new QLabel("Protocol", this);
+	QLabel* lblState = new QLabel("Connection state:", this);
+	QLabel* lblCurrentState = new QLabel("", this);
 	m_pleHost = new QLineEdit("test.mosquitto.org", this);
 	m_psbPort = new QSpinBox(this);
 	m_pleTopicName = new QLineEdit(this);
@@ -28,6 +31,7 @@ MQTTConnectionManager::MQTTConnectionManager(QWidget* parent) : QWidget(parent) 
 	QVBoxLayout* mainLayout = new QVBoxLayout(this);
 	QGridLayout* connectionSettingsLayout = new QGridLayout(groupConnectionSettings);
 	QHBoxLayout* tempLayout = new QHBoxLayout; //todo delete this
+	QHBoxLayout* stateLayout = new QHBoxLayout;
 
 	connectionSettingsLayout->addWidget(lblHost, 0, 0);
 	connectionSettingsLayout->addWidget(m_pleHost, 0, 1);
@@ -37,11 +41,15 @@ MQTTConnectionManager::MQTTConnectionManager(QWidget* parent) : QWidget(parent) 
 	connectionSettingsLayout->addWidget(lblProtocol, 3, 0);
 	connectionSettingsLayout->addWidget(m_pcbProtocol, 3, 1);
 
+	stateLayout->addWidget(lblState);
+	stateLayout->addWidget(lblCurrentState, Qt::AlignLeft);
+
 	tempLayout->addWidget(lblTopicName);
 	tempLayout->addWidget(m_pleTopicName);
 	tempLayout->addWidget(m_pbtnTopicSubscribe);
 
 	mainLayout->addWidget(groupConnectionSettings);
+	mainLayout->addLayout(stateLayout);
 	mainLayout->addWidget(m_pbtnConnect);
 	mainLayout->addLayout(tempLayout);
 	mainLayout->addStretch(1);
@@ -61,6 +69,9 @@ MQTTConnectionManager::MQTTConnectionManager(QWidget* parent) : QWidget(parent) 
 	connect(m_pmqttClient, &QMqttClient::errorChanged, this, [this](QMqttClient::ClientError error) {
 			m_ppteLogMessages->appendPlainText("MQTT error: " + QString::number(error));
 	});
+	connect(m_pmqttClient, &QMqttClient::stateChanged, this, [lblCurrentState] (QMqttClient::ClientState state) {
+		lblCurrentState->setText(QMetaEnum::fromType<QMqttClient::ClientState>().valueToKey(state));
+		});
 
 	m_ppteLogMessages->setReadOnly(true);
 	m_pcbProtocol->addItems({
@@ -70,6 +81,8 @@ MQTTConnectionManager::MQTTConnectionManager(QWidget* parent) : QWidget(parent) 
 		});
 	m_psbPort->setMaximum(65535); //numeric_limit<quint16>
 	m_psbPort->setValue(1883);
+
+	m_pmqttClient->emit stateChanged(m_pmqttClient->state());
 
 	resize(500, 400);
 }
@@ -129,11 +142,13 @@ void MQTTConnectionManager::onBtnSubscribeClick() {
 }
 
 void MQTTConnectionManager::onMessageReceived(const QByteArray& message, const QMqttTopicName& topic) {
-	m_ppteLogMessages->insertPlainText(QDateTime::currentDateTime().toString() +
-		" Received topic:" + topic.name() +
-		" Message: " + message +
-		"\n"
-	);
+	//m_ppteLogMessages->insertPlainText(QDateTime::currentDateTime().toString() +
+	//	" Received topic:" + topic.name() +
+	//	" Message: " + message +
+	//	"\n"
+	//);
+
+	qDebug() << QDateTime::currentDateTime().toString() << topic.name();
 }
 
 void MQTTConnectionManager::onDisconnectBroker() {
