@@ -5,7 +5,7 @@
 #include <QAction>
 #include <QDockWidget>
 #include <qlayout.h>
-#include <QTreeWidget>
+#include <QTreeView>
 #include <QHeaderView>
 
 MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags) : QMainWindow(parent, flags) {
@@ -26,10 +26,21 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags) : QMainWindow(par
 
 void MainWindow::addDockTreeTopicsNames() {
 	QDockWidget* dockWidgetTopics = new QDockWidget("Topics", this);
-	QTreeWidget* treeWidgetTopics = new QTreeWidget(dockWidgetTopics);
+	m_pTreeWidgetTopics = new QTreeView(dockWidgetTopics);
+	m_pModel = new QStandardItemModel(m_pTreeWidgetTopics);
+	m_pTreeWidgetTopics->setModel(m_pModel);
 
-	treeWidgetTopics->header()->hide();
-	dockWidgetTopics->setWidget(treeWidgetTopics);
+	m_pTreeWidgetTopics->header()->hide();
+	dockWidgetTopics->setWidget(m_pTreeWidgetTopics);
 
+	connect(m_pMqttConnectionManager->getMqttClient(), &QMqttClient::messageReceived, 
+		this, &MainWindow::onMessageReceived);
+	
 	addDockWidget(Qt::LeftDockWidgetArea, dockWidgetTopics);
+}
+
+void MainWindow::onMessageReceived(const QByteArray& message, const QMqttTopicName& topic) {
+	QStandardItem* topicTreeItem = new QStandardItem(topic.name());
+	m_pModel->appendRow(topicTreeItem);
+	
 }

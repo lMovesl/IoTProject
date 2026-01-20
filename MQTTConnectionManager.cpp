@@ -87,6 +87,10 @@ MQTTConnectionManager::MQTTConnectionManager(QWidget* parent) : QWidget(parent) 
 	resize(500, 400);
 }
 
+const QMqttClient* MQTTConnectionManager::getMqttClient() const {
+	return m_pmqttClient;
+}
+
 void MQTTConnectionManager::onBtnConnectClick() {
 	m_pmqttClient->setHostname(m_pleHost->text());
 	m_pmqttClient->setPort(m_uiPort);
