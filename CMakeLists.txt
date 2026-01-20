@@ -22,6 +22,7 @@ qt_standard_project_setup()
 qt_add_executable(IOTProject
     "main.cpp"
     "MQTTConnectionManager.cpp" "MQTTConnectionManager.h"
+    "MainWindow.cpp" "MainWindow.h"
 )
 
 target_link_libraries(IOTProject PRIVATE Qt6::Widgets)

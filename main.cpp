@@ -1,12 +1,12 @@
 ﻿#include <QApplication>
 
-#include "MQTTConnectionManager.h"
+#include "MainWindow.h"
 
 int main(int argc, char* argv[]) {
 	QApplication app(argc, argv);
 	//сканим первый уровень /остальные по открытию в дереве
-	MQTTConnectionManager* connManager = new MQTTConnectionManager;
-	connManager->show();
+	MainWindow* mainWindow = new MainWindow;
+	mainWindow->show();
 
 	app.exec();
 	return 0;

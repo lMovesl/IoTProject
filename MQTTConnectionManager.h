@@ -14,6 +14,8 @@ class MQTTConnectionManager : public QWidget {
 	Q_OBJECT
 public:
 	MQTTConnectionManager(QWidget* parent = nullptr);
+	//const * const?
+	const QMqttClient* getMqttClient() const;
 private:
 	QMqttClient* m_pmqttClient = nullptr;
 	quint16 m_uiPort;
@@ -38,4 +40,4 @@ public slots:
 	void setClientPort(int port);
 };
 
-#endif MQTT_CONNECTION_MANAGER_H	
+#endif //MQTT_CONNECTION_MANAGER_H	
