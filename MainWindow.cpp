@@ -27,7 +27,7 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags) : QMainWindow(par
 void MainWindow::addDockTreeTopicsNames() {
 	QDockWidget* dockWidgetTopics = new QDockWidget("Topics", this);
 	m_pTreeWidgetTopics = new QTreeView(dockWidgetTopics);
-	m_pModel = new QStandardItemModel(m_pTreeWidgetTopics);
+	
 	m_pTreeWidgetTopics->setModel(m_pModel);
 
 	m_pTreeWidgetTopics->header()->hide();
@@ -41,6 +41,4 @@ void MainWindow::addDockTreeTopicsNames() {
 
 void MainWindow::onMessageReceived(const QByteArray& message, const QMqttTopicName& topic) {
 	QStandardItem* topicTreeItem = new QStandardItem(topic.name());
-	m_pModel->appendRow(topicTreeItem);
-	
 }

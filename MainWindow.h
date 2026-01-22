@@ -6,6 +6,7 @@
 #include <QWidget>
 #include <QStandardItemModel>
 
+#include "TreeModel.h"
 #include "MQTTConnectionManager.h"
 
 
@@ -19,7 +20,7 @@ private:
 	MQTTConnectionManager* m_pMqttConnectionManager = nullptr;
 
 	QTreeView* m_pTreeWidgetTopics = nullptr;
-	QStandardItemModel* m_pModel = nullptr;
+	TreeModel* m_pModel = nullptr;
 	QList<QTreeWidgetItem*> lstTreeItems;
 public slots:
 	void onMessageReceived(const QByteArray& message, const QMqttTopicName& topic);

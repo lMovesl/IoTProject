@@ -23,6 +23,8 @@ qt_add_executable(IOTProject
     "main.cpp"
     "MQTTConnectionManager.cpp" "MQTTConnectionManager.h"
     "MainWindow.cpp" "MainWindow.h"
+    "TreeItem.cpp" "TreeItem.h"
+    "TreeModel.cpp" "TreeModel.h"
 )
 
 target_link_libraries(IOTProject PRIVATE Qt6::Widgets)
