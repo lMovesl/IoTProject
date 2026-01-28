@@ -57,7 +57,7 @@ MQTTConnectionManager::MQTTConnectionManager(QWidget* parent) : QWidget(parent) 
 	mainLayout->addWidget(m_ppteLogMessages);
 	
 	connect(m_pmqttClient, &QMqttClient::disconnected, this, &MQTTConnectionManager::onDisconnectBroker);
-	connect(m_pmqttClient, &QMqttClient::messageReceived, this, &MQTTConnectionManager::onMessageReceived);
+	//connect(m_pmqttClient, &QMqttClient::messageReceived, this, &MQTTConnectionManager::onMessageReceived);
 	connect(m_psbPort, &QSpinBox::valueChanged, this, &MQTTConnectionManager::setClientPort);
 	connect(m_pbtnConnect, &QPushButton::clicked, this, &MQTTConnectionManager::onBtnConnectClick);
 	connect(m_pbtnTopicSubscribe, &QPushButton::clicked, this, &MQTTConnectionManager::onBtnSubscribeClick);

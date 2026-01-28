@@ -1,4 +1,5 @@
 ﻿#include "MainWindow.h"
+#include <utility>
 
 #include <QMenuBar>
 #include <QMenu>
@@ -25,12 +26,14 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags flags) : QMainWindow(par
 }
 
 void MainWindow::addDockTreeTopicsNames() {
-	QDockWidget* dockWidgetTopics = new QDockWidget("Topics", this);
-	m_pTreeWidgetTopics = new QTreeView(dockWidgetTopics);
-	
-	m_pTreeWidgetTopics->setModel(m_pModel);
+	m_pModel = new TreeModel({ "TopicName" });
 
+	QDockWidget* dockWidgetTopics = new QDockWidget("Topics", this);
+
+	m_pTreeWidgetTopics = new QTreeView(dockWidgetTopics);
+	m_pTreeWidgetTopics->setModel(m_pModel);
 	m_pTreeWidgetTopics->header()->hide();
+
 	dockWidgetTopics->setWidget(m_pTreeWidgetTopics);
 
 	connect(m_pMqttConnectionManager->getMqttClient(), &QMqttClient::messageReceived, 
@@ -40,5 +43,27 @@ void MainWindow::addDockTreeTopicsNames() {
 }
 
 void MainWindow::onMessageReceived(const QByteArray& message, const QMqttTopicName& topic) {
-	QStandardItem* topicTreeItem = new QStandardItem(topic.name());
+	QString topicName = topic.name();
+	if (m_mapTopicNameIndex.contains(topicName))
+		return;
+
+	QString path = "";
+	QModelIndex parent;
+	for (const QString& level : topic.levels())
+	{
+		path += level + '/';
+		if (!m_mapTopicNameIndex.contains(path))
+		{
+			int row = m_pModel->rowCount(parent);
+
+			m_pModel->insertRows(row, 1, parent);
+			auto newItemIndex = m_pModel->index(row, 0, parent);
+			m_pModel->setData(newItemIndex, level);
+
+			parent = newItemIndex;
+			m_mapTopicNameIndex[path] = newItemIndex;
+		}
+		else
+			parent = m_mapTopicNameIndex[path];
+	}
 }

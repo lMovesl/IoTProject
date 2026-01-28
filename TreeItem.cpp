@@ -16,7 +16,7 @@ TreeItem* TreeItem::child(int row) {
 }
 
 int TreeItem::childCount() const {
-	return static_cast<int>(m_varlstData.size());
+	return static_cast<int>(m_vpChildItems.size());
 }
 
 int TreeItem::columnCount() const {

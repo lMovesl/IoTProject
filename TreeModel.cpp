@@ -40,10 +40,12 @@ QVariant TreeModel::headerData(int section, Qt::Orientation orientation, int rol
 }
 
 QModelIndex TreeModel::index(int row, int column, const QModelIndex& parent) const {
-	if (!hasIndex(row, column, parent))
+	if (parent.isValid() && parent.column() != 0)
 		return {};
 
 	TreeItem* parentItem = getItem(parent);
+	if (!parentItem)
+		return {};
 
 	if (auto* childItem = parentItem->child(row))
 		return createIndex(row, column, childItem);
@@ -136,6 +138,18 @@ bool TreeModel::removeRows(int position, int rows, const QModelIndex& parent)
 	endRemoveRows();
 
 	return success;
+}
+
+TreeItem* TreeModel::item(int row, const QModelIndex& parent) const {
+	TreeItem* parentItem = getItem(parent);
+	if (!parentItem)
+		return nullptr;
+
+	TreeItem* childItem = parentItem->child(row);
+	if (!childItem)
+		return nullptr;
+
+	return childItem;
 }
 
 bool TreeModel::insertColumns(int position, int columns, const QModelIndex& parent)
