@@ -5,8 +5,7 @@
 #include <QTreeWidget>
 #include <QWidget>
 #include <QStandardItemModel>
-
-#include <unordered_map>
+#include <QMap>
 
 #include "TreeModel.h"
 #include "MQTTConnectionManager.h"
@@ -17,6 +16,7 @@ class MainWindow : public QMainWindow {
 public:
 	explicit MainWindow(QWidget* parent = nullptr, Qt::WindowFlags flags = Qt::WindowFlags());
 private:
+	void addCentralWidget();
 	void addDockTreeTopicsNames();
 
 	MQTTConnectionManager* m_pMqttConnectionManager = nullptr;
@@ -25,9 +25,13 @@ private:
 	TreeModel* m_pModel = nullptr;
 	QList<QTreeWidgetItem*> lstTreeItems;
 
-	std::unordered_map<QString, QModelIndex> m_mapTopicNameIndex;
+	QMap<QString, QModelIndex> m_mapPathIndex;
+	QMap<QModelIndex, QString> m_mapIndexPath;
+signals:
+	void clickedTopic(const QString& topicName);
+
 public slots:
-	void onMessageReceived(const QByteArray& message, const QMqttTopicName& topic);
+	void onSubscriptionMessageReceived(QMqttMessage);
 };
 
 #endif //MAIN_WINDOW_H

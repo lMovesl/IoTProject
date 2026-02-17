@@ -32,12 +32,17 @@ private:
 	QCheckBox* m_pchbSecure = nullptr;
 	//QCheckBox* m_pchbWebSockets = nullptr;
 	QPlainTextEdit* m_ppteLogMessages = nullptr;
+	//delete
+	QSet<QMqttSubscription*> m_setSubscriptions;
 public slots:
 	void onBtnConnectClick();
 	void onBtnSubscribeClick();
 	void onMessageReceived(const QByteArray& message, const QMqttTopicName& topic);
 	void onDisconnectBroker();
 	void setClientPort(int port);
+	void handleSubscribeState(QMqttSubscription::SubscriptionState);
+signals:
+	void subscriptionMessageReceive(QMqttMessage);
 };
 
 #endif //MQTT_CONNECTION_MANAGER_H	

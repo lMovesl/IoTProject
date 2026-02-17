@@ -143,6 +143,12 @@ void MQTTConnectionManager::onBtnSubscribeClick() {
 	auto subscription = m_pmqttClient->subscribe(m_pleTopicName->text());
 	if (!subscription) 
 		QMessageBox::critical(this, u"Error"_s, u"Could not a subscribe"_s);
+	else if (!m_setSubscriptions.contains(subscription))
+	{
+		m_setSubscriptions.insert(subscription);
+		connect(subscription, &QMqttSubscription::stateChanged, this, &MQTTConnectionManager::handleSubscribeState);
+		connect(subscription, &QMqttSubscription::messageReceived, this, &MQTTConnectionManager::subscriptionMessageReceive);
+	}
 }
 
 void MQTTConnectionManager::onMessageReceived(const QByteArray& message, const QMqttTopicName& topic) {
@@ -156,6 +162,8 @@ void MQTTConnectionManager::onMessageReceived(const QByteArray& message, const Q
 }
 
 void MQTTConnectionManager::onDisconnectBroker() {
+	m_setSubscriptions.clear();
+
 	m_pleHost->setEnabled(true);
 	m_psbPort->setEnabled(true);
 	m_pchbSecure->setEnabled(true);
@@ -166,4 +174,19 @@ void MQTTConnectionManager::onDisconnectBroker() {
 
 void MQTTConnectionManager::setClientPort(int port) {
 	m_uiPort = static_cast<quint16>(port);
+}
+
+void MQTTConnectionManager::handleSubscribeState(QMqttSubscription::SubscriptionState subscriptionState) {
+	auto subscription = dynamic_cast<QMqttSubscription*>(sender());
+	switch (subscriptionState)
+	{
+	case QMqttSubscription::Unsubscribed:
+	case QMqttSubscription::Error:
+		qDebug() << static_cast<quint8>(subscription->reasonCode());
+		m_setSubscriptions.remove(subscription);
+		delete subscription;
+		break;
+	default:
+		break;
+	}
 }
