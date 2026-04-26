@@ -87,7 +87,7 @@ MQTTConnectionManager::MQTTConnectionManager(QWidget* parent) : QWidget(parent) 
 	resize(500, 400);
 }
 
-const QMqttClient* MQTTConnectionManager::getMqttClient() const {
+QMqttClient* MQTTConnectionManager::getMqttClient() const {
 	return m_pmqttClient;
 }
 
