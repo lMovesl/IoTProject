@@ -58,34 +58,3 @@ void DeviceTreeModel::refreshStructure() {
         this->appendRow(roomItem);
     }
 }
-
-void DeviceTreeModel::updateValues() {
-    // Итерируемся по всем сохраненным ячейкам значений
-    QMapIterator<int, QStandardItem*> i(m_valueItems);
-    while (i.hasNext()) {
-        i.next();
-        int sensorId = i.key();
-        QStandardItem* item = i.value();
-
-        // Получаем последнее значение из БД
-        QString val = DatabaseManager::instance().getLastSensorValue(sensorId);
-
-        // Находим единицу измерения (хранится в текущем тексте или можно вытянуть из БД)
-        // Для простоты предположим, что мы просто обновляем текст
-        item->setText(val);
-    }
-}
-
-void DeviceTreeModel::updateSensorValue(int sensorId, double value,
-                                        const QString& unit,
-                                        const QDateTime& timestamp)
-{
-    if (m_valueItems.contains(sensorId)) {
-        QStandardItem* item = m_valueItems[sensorId];
-        // Форматируем значение с достаточной точностью
-        QString txt = QString::number(value, 'g', 6) + unit;
-        item->setText(txt);
-        // При желании можно сохранить timestamp в данных элемента:
-        // item->setData(timestamp, Qt::UserRole+1);
-    }
-}

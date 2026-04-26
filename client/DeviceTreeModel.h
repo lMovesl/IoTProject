@@ -14,15 +14,6 @@ public:
 
     // Полная перестройка дерева (комнаты и устройства)
     void refreshStructure();
-
-    // Быстрое обновление только значений датчиков (без пересоздания узлов)
-    void updateValues();
-
-public slots:
-    void updateSensorValue(int sensorId, double value,
-                           const QString& unit,
-                           const QDateTime& timestamp);
-
 private:
 
     // Хранилище для быстрого доступа к ячейкам значений:

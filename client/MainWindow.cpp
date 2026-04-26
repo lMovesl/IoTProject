@@ -35,8 +35,6 @@ MainWindow::MainWindow(QWidget* parent)
     // 3. Сборка интерфейса вручную
     setupLayout();
 
-  
-
     // 5. Первичная загрузка структуры и подписки на существующие устройства
     m_model->refreshStructure();
     subscribeToAllDevices();
@@ -83,7 +81,7 @@ void MainWindow::setupLayout()
             &MainWindow::showContextMenu);
 
     // 4. Настройка таймера (обновление из БД как запасной вариант)
-    connect(m_refreshTimer, &QTimer::timeout, m_deviceInfoWidget, &DeviceInfoWidget::displayDevice);
+    connect(m_refreshTimer, &QTimer::timeout, m_deviceInfoWidget, &DeviceInfoWidget::updateData);
     m_refreshTimer->start(2000);
 
     setWindowTitle("IoT System Control Panel");
@@ -108,7 +106,7 @@ void MainWindow::onTreeItemClicked(const QModelIndex& index) {
     if (deviceId != -1 && deviceItem != nullptr) {
         // Отображаем устройство в центральном виджете
         m_deviceInfoWidget->setDevice(deviceId, deviceItem->text());
-        m_deviceInfoWidget->displayDevice();
+        m_deviceInfoWidget->updateData();
     }
 }
 
@@ -160,18 +158,6 @@ void MainWindow::showContextMenu(const QPoint& pos)
     }
 
     menu.exec(m_treeView->viewport()->mapToGlobal(pos));
-}
-
-void MainWindow::updateData()
-{
-    m_model->updateValues();
-}
-
-void MainWindow::onRefreshClicked()
-{
-    m_model->refreshStructure();
-    subscribeToAllDevices();
-    m_treeView->expandAll();
 }
 
 void MainWindow::onDeviceDoubleClicked(const QModelIndex& index)
@@ -275,19 +261,10 @@ void MainWindow::handleMqttMessage(const QString& topic, const QByteArray& paylo
         }
 
         int sensorId = DatabaseManager::instance().getOrCreateSensor(deviceId, sensorKey, unit);
-        m_model->updateSensorValue(sensorId, value, unit, ts);
         if (m_openGraphs.contains(sensorId)) {
             m_openGraphs[sensorId]->appendPoint(value, ts);
         }
     }
-}
-
-void MainWindow::updateSensorValue(int sensorId, double value,
-                                   const QString& unit,
-                                   const QDateTime& timestamp)
-{
-    // Прямой вызов модели (слот уже существует в DeviceTreeModel)
-    m_model->updateSensorValue(sensorId, value, unit, timestamp);
 }
 
 void MainWindow::openGraphWindow(int sensorId, const QString& sensorName)

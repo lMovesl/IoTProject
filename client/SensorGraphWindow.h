@@ -21,15 +21,16 @@ private slots:
     void applyInterval();
 public slots:
     void appendPoint(double value, const QDateTime& timestamp);
+    void loadData();
 
 private:
-    void loadData();
-    void refreshData();
     int m_sensorId;
     QLineSeries* m_series;
     QChart* m_chart;
     QTimer* m_timer;
     QDateTime m_lastTimestamp;
+    QDateTime m_start;
+    QDateTime m_end;
     // UI controls for time interval selection
     QDateTimeEdit* m_startEdit;
     QDateTimeEdit* m_endEdit;

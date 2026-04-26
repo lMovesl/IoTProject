@@ -23,11 +23,8 @@ public:
     ~MainWindow();
 
 private slots:
-    void onRefreshClicked();
-    void updateData();
     void showContextMenu(const QPoint& pos);
     void handleMqttMessage(const QString& topic, const QByteArray& payload);
-    void updateSensorValue(int sensorId, double value, const QString& unit, const QDateTime& timestamp);
     void openGraphWindow(int sensorId, const QString& sensorName);
     void onTreeItemClicked(const QModelIndex& index);
 private:

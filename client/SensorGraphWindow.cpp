@@ -68,8 +68,10 @@ SensorGraphWindow::SensorGraphWindow(int sensorId, const QString& sensorName, QW
 
     // --- Timer for live updates --------------------------------------------
     m_timer = new QTimer(this);
-    connect(m_timer, &QTimer::timeout, this, &SensorGraphWindow::refreshData);
+    connect(m_timer, &QTimer::timeout, this, &SensorGraphWindow::loadData);
     m_timer->start(2000);
+
+    m_lastTimestamp.setTimeZone(QTimeZone::LocalTime);
 
 	//Load the default interval data
     applyInterval();
@@ -80,13 +82,10 @@ void SensorGraphWindow::loadData() {
     if (!DatabaseManager::instance().open()) return;
 
     QSqlQuery q(DatabaseManager::instance().database());
-    const QDateTime start = m_startEdit->dateTime();
-    const QDateTime end = m_endEdit->dateTime();
-
     q.prepare("SELECT value, timestamp FROM sensor_data WHERE sensor_id = ? AND timestamp BETWEEN ? AND ? ORDER BY timestamp ASC");
     q.addBindValue(m_sensorId);
-    q.addBindValue(start);
-    q.addBindValue(end);
+    q.addBindValue(m_start.toString("yyyy-MM-dd HH:mm:ss"));
+    q.addBindValue(m_end.toString("yyyy-MM-dd HH:mm:ss"));
 
     // Clear any existing points before loading a new range
     m_series->clear();
@@ -96,6 +95,7 @@ void SensorGraphWindow::loadData() {
         while (q.next()) {
             double val = q.value(0).toDouble();
             QDateTime dt = q.value(1).toDateTime();
+            dt.setTimeZone(QTimeZone::LocalTime);
             m_series->append(dt.toMSecsSinceEpoch(), val);
             m_lastTimestamp = dt; // keep track of newest point
         }
@@ -134,62 +134,9 @@ void SensorGraphWindow::loadData() {
 
 // Slot invoked when the user clicks the Apply button
 void SensorGraphWindow::applyInterval() {
+    m_start = m_startEdit->dateTime();
+    m_end = m_endEdit->dateTime();
     loadData(); // reload data for the newly chosen interval
-}
-
-void SensorGraphWindow::refreshData() {
-    // Pull any rows newer than the last known timestamp
-    QSqlQuery q(DatabaseManager::instance().database());
-    q.prepare("SELECT value, timestamp FROM sensor_data WHERE sensor_id = ? AND timestamp > ? ORDER BY timestamp ASC");
-    q.addBindValue(m_sensorId);
-    q.addBindValue(m_lastTimestamp);
-
-    if (q.exec()) {
-        bool added = false;
-        const QDateTime start = m_startEdit->dateTime();
-        const QDateTime end = m_endEdit->dateTime();
-        while (q.next()) {
-            double val = q.value(0).toDouble();
-            QDateTime dt = q.value(1).toDateTime();
-            // Only add if within the user‑selected interval
-            if (dt >= start && dt <= end) {
-                m_series->append(dt.toMSecsSinceEpoch(), val);
-                added = true;
-            }
-            // Update the newest timestamp regardless of interval (so future queries stay incremental)
-            m_lastTimestamp = dt;
-        }
-        if (added) {
-            // Update axis ranges similar to loadData()
-            if (!m_series->points().isEmpty()) {
-                auto points = m_series->points();
-                qint64 minX = points.front().x();
-                qint64 maxX = points.back().x();
-                auto axesX = m_chart->axes(Qt::Horizontal);
-                auto axesY = m_chart->axes(Qt::Vertical);
-                if (!axesX.isEmpty()) {
-                    QDateTimeAxis* ax = qobject_cast<QDateTimeAxis*>(axesX.first());
-                    if (ax) ax->setRange(QDateTime::fromMSecsSinceEpoch(minX), QDateTime::fromMSecsSinceEpoch(maxX));
-                }
-                if (!axesY.isEmpty()) {
-                    QValueAxis* ay = qobject_cast<QValueAxis*>(axesY.first());
-                    if (ay) {
-                        double minY = points.front().y();
-                        double maxY = points.front().y();
-                        for (const QPointF& p : points) {
-                            if (p.y() < minY) minY = p.y();
-                            if (p.y() > maxY) maxY = p.y();
-                        }
-                        double padding = (maxY - minY) * 0.1;
-                        if (padding == 0) padding = 1.0;
-                        ay->setRange(minY - padding, maxY + padding);
-                    }
-                }
-            }
-        }
-    } else {
-        qDebug() << "Ошибка при загрузке новых точек графика:" << q.lastError();
-    }
 }
 
 void SensorGraphWindow::appendPoint(double value, const QDateTime& timestamp)
@@ -238,6 +185,6 @@ void SensorGraphWindow::appendPoint(double value, const QDateTime& timestamp)
 SensorGraphWindow::~SensorGraphWindow() {
     if (m_timer) {
         m_timer->stop();
-        disconnect(m_timer, &QTimer::timeout, this, &SensorGraphWindow::refreshData);
+        disconnect(m_timer, &QTimer::timeout, this, &SensorGraphWindow::loadData);
     }
 }
