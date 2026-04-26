@@ -212,3 +212,35 @@ void DatabaseManager::processCombinedJson(const QString& uniqueId, const QByteAr
         q.exec();
     }
 }
+
+bool DatabaseManager::isDeviceOnline(int deviceId, int timeoutSeconds) {
+    QSqlQuery q(m_db);
+    q.prepare("SELECT timestamp FROM sensor_data sd "
+        "JOIN sensors s ON sd.sensor_id = s.id "
+        "WHERE s.device_id = ? ORDER BY sd.timestamp DESC LIMIT 1");
+    q.addBindValue(deviceId);
+
+    if (q.exec() && q.next()) {
+        QDateTime lastSeen = q.value(0).toDateTime();
+        lastSeen.setTimeZone(QTimeZone::LocalTime); // Учитываем, что храним локально
+        return lastSeen.secsTo(QDateTime::currentDateTime()) < timeoutSeconds;
+    }
+    return false;
+}
+
+QList<DeviceInfo> DatabaseManager::getAllDevices() {
+    QList<DeviceInfo> list;
+    if (!m_db.isOpen()) return list;
+
+    QSqlQuery q("SELECT id, name, room_id, unique_id FROM devices", m_db);
+
+    while (q.next()) {
+        DeviceInfo dev;
+        dev.id = q.value(0).toInt();
+        dev.name = q.value(1).toString();
+        dev.roomId = q.value(2).toInt(); // room_id может быть NULL, тогда вернет 0
+        dev.uniqueId = q.value(3).toString();
+        list.append(dev);
+    }
+    return list;
+}

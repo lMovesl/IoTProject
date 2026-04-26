@@ -53,6 +53,8 @@ public:
     int getOrCreateDevice(const QString& uniqueId);
     int getOrCreateSensor(int deviceId, const QString& key, const QString& unit = "?");
     void processCombinedJson(const QString& uniqueId, const QByteArray& jsonData);
+    bool isDeviceOnline(int deviceId, int timeoutSeconds = 300); // По умолчанию 5 минут
+    QList<DeviceInfo> getAllDevices();
 private:
     explicit DatabaseManager(QObject* parent = nullptr);
     QSqlDatabase m_db;

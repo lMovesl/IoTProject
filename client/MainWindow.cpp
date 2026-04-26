@@ -38,7 +38,7 @@ MainWindow::MainWindow(QWidget* parent)
     // 5. Первичная загрузка структуры и подписки на существующие устройства
     m_model->refreshStructure();
     subscribeToAllDevices();
-    m_treeView->expandAll();
+    m_treeView->expandToDepth(0);
 }
 
 MainWindow::~MainWindow()
@@ -60,7 +60,6 @@ void MainWindow::setupLayout()
     // Tree view will be placed in a dock widget
     m_treeView = new QTreeView(this);
     m_treeView->setModel(m_model);
-    m_treeView->hideColumn(1);
     m_treeView->header()->setSectionResizeMode(QHeaderView::Stretch);
 
     // Container widget for the dock
@@ -82,9 +81,11 @@ void MainWindow::setupLayout()
 
     // 4. Настройка таймера (обновление из БД как запасной вариант)
     connect(m_refreshTimer, &QTimer::timeout, m_deviceInfoWidget, &DeviceInfoWidget::updateData);
+    connect(m_refreshTimer, &QTimer::timeout, m_model, &DeviceTreeModel::syncDevicesFromDb);
+    connect(m_refreshTimer, &QTimer::timeout, m_model, &DeviceTreeModel::updateDeviceStatuses);
     m_refreshTimer->start(2000);
 
-    setWindowTitle("IoT System Control Panel");
+    setWindowTitle("IOT");
     resize(800, 600);
 }
 
@@ -133,8 +134,6 @@ void MainWindow::showContextMenu(const QPoint& pos)
             ConfigureDeviceDialog dialog(deviceId, this);
             if (dialog.exec() == QDialog::Accepted) {
                 m_model->refreshStructure();
-                m_treeView->expandAll();
-                // После изменения конфигурации обновляем подписки
                 subscribeToAllDevices();
             }
         });
@@ -170,8 +169,6 @@ void MainWindow::onDeviceDoubleClicked(const QModelIndex& index)
     ConfigureDeviceDialog dialog(deviceId, this);
     if (dialog.exec() == QDialog::Accepted) {
         m_model->refreshStructure();
-        m_treeView->expandAll();
-        // После изменения конфигурации обновляем подписки
         subscribeToAllDevices();
     }
 }

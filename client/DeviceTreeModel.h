@@ -11,18 +11,16 @@ class DeviceTreeModel : public QStandardItemModel {
 
 public:
     explicit DeviceTreeModel(QObject* parent = nullptr);
-
-    // Полная перестройка дерева (комнаты и устройства)
+public slots:
     void refreshStructure();
+    void updateDeviceStatuses();
+    void syncDevicesFromDb();
 private:
+    void loadSensorsForNewDevice(QStandardItem* devItem, int deviceId);
 
-    // Хранилище для быстрого доступа к ячейкам значений:
-    // Map <sensor_id, QStandardItem*>
-    QMap<int, QStandardItem*> m_valueItems;
-
-    // Вспомогательный метод для создания строки (имя + значение)
-    QList<QStandardItem*> createTreeRow(const QString& name, const QString& value,
-                                        int id, bool isDevice);
+    QMap<int, QStandardItem*> m_roomItems;   // <roomId, item>
+    QMap<int, QStandardItem*> m_deviceItems; // <deviceId, item>
+    QMap<int, QStandardItem*> m_sensorItems; // <sensorId, item>
 };
 
 #endif // DEVICETREEMODEL_H
