@@ -15,7 +15,6 @@ void DeviceInfoWidget::setupUI() {
     m_infoLabel->setStyleSheet("font-size: 18px; font-weight: bold; margin-bottom: 10px;");
     mainLayout->addWidget(m_infoLabel);
 
-    // Таблица: Датчик | Значение | Среднее (1ч)
     m_sensorsTable = new QTableWidget(0, 3, this);
     m_sensorsTable->setHorizontalHeaderLabels({ "Датчик", "Значение", "Среднее (за час)" });
     m_sensorsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
@@ -25,7 +24,6 @@ void DeviceInfoWidget::setupUI() {
 
     mainLayout->addWidget(new QLabel("История за последний час:", this));
 
-    // Настройка области прокрутки для графиков
     QScrollArea* scrollArea = new QScrollArea(this);
     scrollArea->setWidgetResizable(true);
     scrollArea->setFrameShape(QFrame::NoFrame);
@@ -69,7 +67,6 @@ void DeviceInfoWidget::updateData() {
         int row = m_sensorsTable->rowCount();
         m_sensorsTable->insertRow(row);
 
-        // 1. Считаем среднее значение за час средствами SQL
         double avgVal = 0.0;
         QSqlQuery qAvg(DatabaseManager::instance().database());
         qAvg.prepare("SELECT AVG(value) FROM sensor_data "
@@ -79,17 +76,14 @@ void DeviceInfoWidget::updateData() {
             avgVal = qAvg.value(0).toDouble();
         }
 
-        // 2. Обновляем таблицу
         m_sensorsTable->setItem(row, 0, new QTableWidgetItem(s.key));
         m_sensorsTable->setItem(row, 1, new QTableWidgetItem(s.lastValue + " " + s.unit));
         m_sensorsTable->setItem(row, 2, new QTableWidgetItem(QString::number(avgVal, 'f', 2) + " " + s.unit));
 
-        // 3. Работа с графиком
         if (!m_sensorCharts.contains(s.id)) {
             createSensorChart(s.id, s.key, s.unit);
         }
 
-        // Обновляем точки на существующем или новом графике
         updateSensorChartData(s.id);
     }
 }
@@ -99,7 +93,7 @@ void DeviceInfoWidget::createSensorChart(int sensorId, const QString& name, cons
     bundle->series = new QLineSeries();
     QChart* chart = new QChart();
     
-    chart->addSeries(bundle->series); // 1. Сначала серию
+    chart->addSeries(bundle->series); 
     chart->setTitle(name + " (" + unit + ")");
     chart->legend()->hide();
 
@@ -112,7 +106,6 @@ void DeviceInfoWidget::createSensorChart(int sensorId, const QString& name, cons
     bundle->axisY->setTitleText(unit);
     chart->addAxis(bundle->axisY, Qt::AlignLeft);
 
-    // 3. ПРИВЯЗЫВАЕМ серию к уже добавленным в чарт осям
     bundle->series->attachAxis(bundle->axisX); 
     bundle->series->attachAxis(bundle->axisY);
 
@@ -128,7 +121,6 @@ void DeviceInfoWidget::updateSensorChartData(int sensorId) {
     auto* bundle = m_sensorCharts[sensorId];
 
     QSqlQuery q(DatabaseManager::instance().database());
-    // Используем UNIX_TIMESTAMP для надежности преобразования
     q.prepare("SELECT value, UNIX_TIMESTAMP(timestamp) FROM sensor_data "
         "WHERE sensor_id = ? AND timestamp > NOW() - INTERVAL 1 HOUR "
         "ORDER BY timestamp ASC");

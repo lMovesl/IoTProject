@@ -14,6 +14,7 @@ public:
     explicit MqttServerService(QObject* parent = nullptr);
     void connectToBroker(const QString& host, quint16 port);
 
+    void publishAlert(const QString& topic, const QString& message);
 private slots:
     void onConnected();
     void onMessageReceived(const QByteArray& message, const QMqttTopicName& topic);

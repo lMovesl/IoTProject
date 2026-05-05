@@ -42,14 +42,11 @@ void ConfigureDeviceDialog::setupUI() {
 }
 
 void ConfigureDeviceDialog::loadData() {
-    // Получаем текущие данные устройства через Singleton
     auto rooms = DatabaseManager::instance().getRooms();
     for (const auto& room : rooms) {
         m_roomCombo->addItem(room.name, room.id);
     }
 
-    // В DatabaseManager стоит добавить метод getDeviceInfo(int id) 
-    // Если его нет, используем прямой SQL для загрузки текущих значений
     QSqlQuery q(DatabaseManager::instance().database());
     q.prepare("SELECT name, unique_id, room_id FROM devices WHERE id = ?");
     q.addBindValue(m_deviceId);
@@ -88,7 +85,6 @@ void ConfigureDeviceDialog::onSaveClicked() {
         }
     }
 
-    // Сохраняем изменения в устройстве
     if (DatabaseManager::instance().updateDeviceConfig(m_deviceId, name, roomId)) {
         accept(); // Закрываем диалог с успехом
     }

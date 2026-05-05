@@ -6,9 +6,12 @@
 #include <QJsonArray>
 #include <QDebug>
 #include <QDateTime>
+#include <QMenuBar>
 
 #include "ConfigureDeviceDialog.h"
 #include "SensorGraphWindow.h"
+#include "SensorConfigDialog.h"
+#include "AlertHistoryWindow.h"
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
@@ -16,16 +19,17 @@ MainWindow::MainWindow(QWidget* parent)
       m_refreshTimer(new QTimer(this)),
       m_mqttClient(new QMqttClient(this))
 {
-
-    // 2. MQTT клиент
     m_mqttClient->setHostname("localhost");
     m_mqttClient->setPort(1883);
-    connect(m_mqttClient, &QMqttClient::connected, this, []() {
+
+    connect(m_mqttClient, &QMqttClient::connected, this, [this]() {
+        m_mqttClient->subscribe(QMqttTopicFilter("devices/+/alerts"));
         qDebug() << "MQTT клиент подключен";
     });
     connect(m_mqttClient, &QMqttClient::disconnected, this, []() {
         qDebug() << "MQTT клиент отключен";
     });
+    connect(m_mqttClient, &QMqttClient::messageReceived, this, &MainWindow::handleAlertMessage);
     connect(m_mqttClient, &QMqttClient::messageReceived, this,
             [this](const QByteArray& payload, const QMqttTopicName& topic) {
                 handleMqttMessage(topic.name(), payload);
@@ -34,8 +38,18 @@ MainWindow::MainWindow(QWidget* parent)
 
     // 3. Сборка интерфейса вручную
     setupLayout();
+    QMenuBar* menubar = new QMenuBar(this);
+    QMenu* menu = new QMenu("Мониторинг", menubar);
+    QAction* alertsHistoryAction = new QAction("История событий", menu);
+    connect(alertsHistoryAction, &QAction::triggered, this, [this]() {
+        AlertHistoryWindow historyWin(this);
+        historyWin.exec();
+        });
 
-    // 5. Первичная загрузка структуры и подписки на существующие устройства
+    setMenuBar(menubar);
+    menubar->addMenu(menu);
+    menu->addAction(alertsHistoryAction);
+
     m_model->refreshStructure();
     subscribeToAllDevices();
     m_treeView->expandToDepth(0);
@@ -53,6 +67,9 @@ MainWindow::~MainWindow()
 
 void MainWindow::setupLayout()
 {
+    m_alertLog = new QListWidget(this);
+    m_alertLog->setStyleSheet("QListWidget { background-color: #2b2b2b; color: #ffffff; font-family: Consolas; }");
+
     // Central widget shows device information
     m_deviceInfoWidget = new DeviceInfoWidget(this);
     setCentralWidget(m_deviceInfoWidget);
@@ -68,13 +85,18 @@ void MainWindow::setupLayout()
     dockLayout->addWidget(m_treeView);
     dockContainer->setLayout(dockLayout);
 
+    QDockWidget* logDock = new QDockWidget("Журнал событий", this);
+    logDock->setWidget(m_alertLog);
+    logDock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::RightDockWidgetArea);
+
     m_dock = new QDockWidget(tr("Устройства"), this);
     m_dock->setWidget(dockContainer);
     addDockWidget(Qt::LeftDockWidgetArea, m_dock);
+    addDockWidget(Qt::BottomDockWidgetArea, logDock);
 
     // Connections
     connect(m_treeView, &QTreeView::clicked, this, &MainWindow::onTreeItemClicked);
-
+    connect(m_treeView, &QTreeView::doubleClicked, this, &MainWindow::onTreeItemDoubleClicked);
     m_treeView->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_treeView, &QTreeView::customContextMenuRequested, this,
             &MainWindow::showContextMenu);
@@ -273,4 +295,47 @@ void MainWindow::openGraphWindow(int sensorId, const QString& sensorName)
     connect(graph, &QObject::destroyed, this,
             [this, sensorId]() { m_openGraphs.remove(sensorId); });
     graph->show();
+}
+
+void MainWindow::handleAlertMessage(const QByteArray& message, const QMqttTopicName& topic) {
+    // Проверяем, что это действительно топик алерта
+    QStringList parts = topic.name().split('/');
+    if (parts.size() == 3 && parts.last() == "alerts") {
+        QString deviceMac = parts.at(1); // Достаем MAC-адрес из середины топика
+
+        QJsonDocument doc = QJsonDocument::fromJson(message);
+        QJsonObject obj = doc.object();
+
+        QString devName = obj["device_name"].toString();
+        QString sensor = obj["sensor"].toString();
+        QString type = obj["type"].toString();
+        double val = obj["value"].toDouble();
+
+        // Формируем запись для твоего m_alertLog (созданного кодом)
+        QString logMsg = QString("[%1] MAC: %2 (%3) -> %4: %5 (Знач: %6)")
+            .arg(QTime::currentTime().toString("HH:mm:ss"))
+            .arg(deviceMac)
+            .arg(devName)
+            .arg(sensor)
+            .arg(type)
+            .arg(val);
+
+        QListWidgetItem* item = new QListWidgetItem(logMsg);
+        item->setForeground(QBrush(QColor("#ff5c5c")));
+        m_alertLog->insertItem(0, item);
+    }
+}
+
+void MainWindow::onTreeItemDoubleClicked(const QModelIndex& index) {
+    // Проверяем, что кликнули именно по датчику, а не по комнате или устройству
+    // В вашей модели это обычно определяется через custom roles или тип данных
+    int sensorId = index.data(Qt::UserRole + 1).toInt(); // Предполагаем, что ID хранится в Role
+
+    if (sensorId > 0) {
+        SensorConfigDialog dialog(sensorId, this);
+        if (dialog.exec() == QDialog::Accepted) {
+            // Можно обновить статус-бар или дерево, если настройки изменились
+            m_alertLog->insertItem(0, "Настройки датчика обновлены");
+        }
+    }
 }

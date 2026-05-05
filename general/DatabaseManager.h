@@ -24,6 +24,18 @@ struct SensorInfo {
     QString key;
     QString unit;
     QString lastValue;
+    double minLimit;
+    double maxLimit;
+    double maxRate;
+};
+
+struct AlertRecord {
+    QString deviceName;
+    QString sensorKey;
+    QString type;
+    double value;
+    QString unit;
+    QString timestamp;
 };
 
 class DatabaseManager : public QObject {
@@ -55,9 +67,19 @@ public:
     void processCombinedJson(const QString& uniqueId, const QByteArray& jsonData);
     bool isDeviceOnline(int deviceId, int timeoutSeconds = 300); // По умолчанию 5 минут
     QList<DeviceInfo> getAllDevices();
+
+    bool saveAlert(int sensorId, const QString& type, double value);
+    QList<AlertRecord> getAlertHistory(int limit = 100);
+    QString getDeviceNameByMac(const QString& mac);
+
+    SensorInfo getSensorSettings(int sensorId);
+    bool updateSensorThresholds(int sensorId, const QVariant& minLimit, const QVariant& maxLimit, const QVariant& maxRate);
 private:
     explicit DatabaseManager(QObject* parent = nullptr);
     QSqlDatabase m_db;
+
+signals:
+    void anomalyDetected(const QString& uid, const QString& deviceName, const QString& sensorKey, double value, const QString& type);
 };
 
 #endif

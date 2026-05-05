@@ -10,8 +10,9 @@
 #include <QTimer>
 #include <QMqttClient>
 #include <QDockWidget>
-#include "DeviceInfoWidget.h"
+#include <QListWidget>
 
+#include "DeviceInfoWidget.h"
 #include "DatabaseManager.h"
 #include "DeviceTreeModel.h"
 
@@ -24,9 +25,11 @@ public:
 
 private slots:
     void showContextMenu(const QPoint& pos);
+    void handleAlertMessage(const QByteArray& message, const QMqttTopicName& topic);
     void handleMqttMessage(const QString& topic, const QByteArray& payload);
     void openGraphWindow(int sensorId, const QString& sensorName);
     void onTreeItemClicked(const QModelIndex& index);
+    void onTreeItemDoubleClicked(const QModelIndex& index);
 private:
     // Элементы интерфейса
     QTreeView* m_treeView;
@@ -36,6 +39,8 @@ private:
     QTimer* m_refreshTimer;
     QMqttClient* m_mqttClient;
     DeviceInfoWidget* m_deviceInfoWidget;
+
+    QListWidget* m_alertLog;
 
     // Mapping deviceId -> MQTT topic
     QMap<int, QString> m_deviceTopics;
