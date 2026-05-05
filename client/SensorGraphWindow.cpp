@@ -17,13 +17,6 @@ SensorGraphWindow::SensorGraphWindow(int sensorId, const QString& sensorName, QW
     setWindowTitle("История показаний: " + sensorName);
     resize(800, 500);
 
-    // --- Series & chart setup -------------------------------------------------
-    m_series = new QLineSeries();
-    m_chart = new QChart();
-    m_chart->addSeries(m_series);
-    m_chart->setTitle("Динамика изменения параметра");
-    m_chart->legend()->hide();
-
     // --- Time‑interval UI ----------------------------------------------------
     m_startEdit = new QDateTimeEdit(this);
     m_endEdit = new QDateTimeEdit(this);
@@ -45,26 +38,14 @@ SensorGraphWindow::SensorGraphWindow(int sensorId, const QString& sensorName, QW
     intervalLayout->addWidget(m_endEdit);
     intervalLayout->addWidget(m_applyBtn);
 
-    // --- Axes ---------------------------------------------------------------
-    QDateTimeAxis* axisX = new QDateTimeAxis;
-    axisX->setFormat("hh:mm:ss");
-    axisX->setTitleText(tr("Время"));
-    m_chart->addAxis(axisX, Qt::AlignBottom);
-    m_series->attachAxis(axisX);
+    m_sensorChart = new SensorChart("История показаний", sensorId, this);
 
-    QValueAxis* axisY = new QValueAxis;
-    axisY->setTitleText(tr("Значение"));
-    m_chart->addAxis(axisY, Qt::AlignLeft);
-    m_series->attachAxis(axisY);
-
-    // --- Chart view ----------------------------------------------------------
-    QChartView* chartView = new QChartView(m_chart, this);
-    chartView->setRenderHint(QPainter::Antialiasing);
-
+    SensorInfo info = DatabaseManager::instance().getSensorSettings(m_sensorId);
+    m_sensorChart->setThresholds(info.minLimit, info.maxLimit);
     // --- Main layout ----------------------------------------------------------
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->addLayout(intervalLayout);
-    mainLayout->addWidget(chartView);
+    mainLayout->addWidget(m_sensorChart);
 
     // --- Timer for live updates --------------------------------------------
     m_timer = new QTimer(this);
@@ -77,57 +58,37 @@ SensorGraphWindow::SensorGraphWindow(int sensorId, const QString& sensorName, QW
     applyInterval();
 }
 
-// Load data for the currently selected interval (called from applyInterval)
 void SensorGraphWindow::loadData() {
     if (!DatabaseManager::instance().open()) return;
 
     QSqlQuery q(DatabaseManager::instance().database());
-    q.prepare("SELECT value, timestamp FROM sensor_data WHERE sensor_id = ? AND timestamp BETWEEN ? AND ? ORDER BY timestamp ASC");
+    q.prepare("SELECT value, timestamp FROM sensor_data "
+        "WHERE sensor_id = ? AND timestamp BETWEEN ? AND ? "
+        "ORDER BY timestamp ASC");
     q.addBindValue(m_sensorId);
     q.addBindValue(m_start.toString("yyyy-MM-dd HH:mm:ss"));
     q.addBindValue(m_end.toString("yyyy-MM-dd HH:mm:ss"));
 
-    // Clear any existing points before loading a new range
-    m_series->clear();
-    m_lastTimestamp = QDateTime();
-
     if (q.exec()) {
+        QList<QPointF> points;
+        QDateTime lastDt;
+
         while (q.next()) {
             double val = q.value(0).toDouble();
             QDateTime dt = q.value(1).toDateTime();
             dt.setTimeZone(QTimeZone::LocalTime);
-            m_series->append(dt.toMSecsSinceEpoch(), val);
-            m_lastTimestamp = dt; // keep track of newest point
-        }
-    }
-    if (m_lastTimestamp.isNull()) {
-        m_lastTimestamp = QDateTime::currentDateTime();
-    }
 
-    // Adjust axis ranges after loading
-    if (!m_series->points().isEmpty()) {
-        auto points = m_series->points();
-        qint64 minX = points.front().x();
-        qint64 maxX = points.back().x();
-        auto axesX = m_chart->axes(Qt::Horizontal);
-        auto axesY = m_chart->axes(Qt::Vertical);
-        if (!axesX.isEmpty()) {
-            QDateTimeAxis* ax = qobject_cast<QDateTimeAxis*>(axesX.first());
-            if (ax) ax->setRange(QDateTime::fromMSecsSinceEpoch(minX), QDateTime::fromMSecsSinceEpoch(maxX));
+            // Наполняем список точек для метода replace[cite: 26]
+            points.append(QPointF(dt.toMSecsSinceEpoch(), val));
+            lastDt = dt;
         }
-        if (!axesY.isEmpty()) {
-            QValueAxis* ay = qobject_cast<QValueAxis*>(axesY.first());
-            if (ay) {
-                double minY = points.front().y();
-                double maxY = points.front().y();
-                for (const QPointF& p : points) {
-                    if (p.y() < minY) minY = p.y();
-                    if (p.y() > maxY) maxY = p.y();
-                }
-                double padding = (maxY - minY) * 0.1;
-                if (padding == 0) padding = 1.0;
-                ay->setRange(minY - padding, maxY + padding);
-            }
+
+        // ПЕРЕДАЕМ ДАННЫЕ В ВИДЖЕТ
+        m_sensorChart->setXAxisRange(m_start, m_end);
+        m_sensorChart->setPoints(points);
+
+        if (!lastDt.isNull()) {
+            m_lastTimestamp = lastDt;
         }
     }
 }
@@ -136,50 +97,7 @@ void SensorGraphWindow::loadData() {
 void SensorGraphWindow::applyInterval() {
     m_start = m_startEdit->dateTime();
     m_end = m_endEdit->dateTime();
-    loadData(); // reload data for the newly chosen interval
-}
-
-void SensorGraphWindow::appendPoint(double value, const QDateTime& timestamp)
-{
-    const QDateTime start = m_startEdit->dateTime();
-    const QDateTime end = m_endEdit->dateTime();
-
-    bool within = (timestamp >= start && timestamp <= end);
-    if (within) {
-        m_series->append(timestamp.toMSecsSinceEpoch(), value);
-    }
-    // Update m_lastTimestamp if this timestamp is newer
-    if (timestamp > m_lastTimestamp) {
-        m_lastTimestamp = timestamp;
-    }
-
-    if (within && !m_series->points().isEmpty()) {
-        // Update axis ranges
-        auto points = m_series->points();
-        qint64 minX = points.front().x();
-        qint64 maxX = points.back().x();
-        auto axesX = m_chart->axes(Qt::Horizontal);
-        auto axesY = m_chart->axes(Qt::Vertical);
-        if (!axesX.isEmpty()) {
-            QDateTimeAxis* ax = qobject_cast<QDateTimeAxis*>(axesX.first());
-            if (ax) ax->setRange(QDateTime::fromMSecsSinceEpoch(minX), QDateTime::fromMSecsSinceEpoch(maxX));
-        }
-        if (!axesY.isEmpty()) {
-            QValueAxis* ay = qobject_cast<QValueAxis*>(axesY.first());
-            if (ay) {
-                double minY = points.front().y();
-                double maxY = points.front().y();
-                for (const QPointF& p : points) {
-                    if (p.y() < minY) minY = p.y();
-                    if (p.y() > maxY) maxY = p.y();
-                }
-                double padding = (maxY - minY) * 0.1;
-                if (padding == 0) padding = 1.0;
-                ay->setRange(minY - padding, maxY + padding);
-            }
-        }
-    }
-
+    loadData();
 }
 
 SensorGraphWindow::~SensorGraphWindow() {
@@ -187,4 +105,8 @@ SensorGraphWindow::~SensorGraphWindow() {
         m_timer->stop();
         disconnect(m_timer, &QTimer::timeout, this, &SensorGraphWindow::loadData);
     }
+}
+
+void SensorGraphWindow::appendPoint(double value, const QDateTime& time) {
+    m_sensorChart->addPoint(time, value);
 }

@@ -47,16 +47,6 @@ void DeviceInfoWidget::setDevice(int deviceId, const QString& name) {
     updateData();  // Первичное заполнение
 }
 
-void DeviceInfoWidget::clearCharts() {
-    QLayoutItem* item;
-    while ((item = m_chartsLayout->takeAt(0)) != nullptr) {
-        if (item->widget()) delete item->widget();
-        delete item;
-    }
-    qDeleteAll(m_sensorCharts);
-    m_sensorCharts.clear();
-}
-
 void DeviceInfoWidget::updateData() {
     if (m_currentDeviceId == -1) return;
 
@@ -88,37 +78,32 @@ void DeviceInfoWidget::updateData() {
     }
 }
 
-void DeviceInfoWidget::createSensorChart(int sensorId, const QString& name, const QString& unit) {
-    SensorChartBundle* bundle = new SensorChartBundle();
-    bundle->series = new QLineSeries();
-    QChart* chart = new QChart();
-    
-    chart->addSeries(bundle->series); 
-    chart->setTitle(name + " (" + unit + ")");
-    chart->legend()->hide();
-
-    bundle->axisX = new QDateTimeAxis();
-    bundle->axisX->setFormat("HH:mm");
-    bundle->axisX->setTitleText("Время");
-    chart->addAxis(bundle->axisX, Qt::AlignBottom); // 2. Добавляем оси в чарт
-
-    bundle->axisY = new QValueAxis();
-    bundle->axisY->setTitleText(unit);
-    chart->addAxis(bundle->axisY, Qt::AlignLeft);
-
-    bundle->series->attachAxis(bundle->axisX); 
-    bundle->series->attachAxis(bundle->axisY);
-
-    bundle->view = new QChartView(chart);
-    bundle->view->setRenderHint(QPainter::Antialiasing);
-    bundle->view->setMinimumHeight(220);
-
-    m_chartsLayout->addWidget(bundle->view);
-    m_sensorCharts.insert(sensorId, bundle);
+void DeviceInfoWidget::clearCharts() {
+    QLayoutItem* item;
+    while ((item = m_chartsLayout->takeAt(0)) != nullptr) {
+        if (item->widget()) delete item->widget();
+        delete item;
+    }
+    // m_sensorCharts очистится автоматически при удалении виджетов из layout
+    m_sensorCharts.clear();
 }
+
+void DeviceInfoWidget::createSensorChart(int sensorId, const QString& name, const QString& unit) {
+    // Используем наш унифицированный компонент
+    SensorChart* chartWidget = new SensorChart(name + " (" + unit + ")", sensorId, this);
+    chartWidget->setMinimumHeight(220);
+
+    // Загружаем пределы из БД и передаем в график[cite: 19, 20]
+    SensorInfo info = DatabaseManager::instance().getSensorSettings(sensorId);
+    chartWidget->setThresholds(info.minLimit, info.maxLimit);
+
+    m_chartsLayout->addWidget(chartWidget);
+    m_sensorCharts.insert(sensorId, chartWidget);
+}
+
 void DeviceInfoWidget::updateSensorChartData(int sensorId) {
     if (!m_sensorCharts.contains(sensorId)) return;
-    auto* bundle = m_sensorCharts[sensorId];
+    SensorChart* chartWidget = m_sensorCharts[sensorId];
 
     QSqlQuery q(DatabaseManager::instance().database());
     q.prepare("SELECT value, UNIX_TIMESTAMP(timestamp) FROM sensor_data "
@@ -128,38 +113,17 @@ void DeviceInfoWidget::updateSensorChartData(int sensorId) {
 
     if (q.exec()) {
         QList<QPointF> points;
-        double minY = 999999, maxY = -999999;
-
         while (q.next()) {
             double val = q.value(0).toDouble();
-            // UNIX_TIMESTAMP возвращает секунды, QtCharts нужны миллисекунды
             qint64 msecs = q.value(1).toLongLong() * 1000;
             points.append(QPointF(msecs, val));
-
-            if (val < minY) minY = val;
-            if (val > maxY) maxY = val;
         }
 
-        // ПРИНУДИТЕЛЬНО устанавливаем диапазон оси X на текущий час, 
-        // даже если точек мало, чтобы не видеть "03:00"
+        // Фиксируем диапазон оси X на последний час
         QDateTime now = QDateTime::currentDateTime();
-        QDateTime start = now.addSecs(-3600);
-        bundle->axisX->setRange(start, now);
+        chartWidget->setXAxisRange(now.addSecs(-3600), now);
 
-        if (!points.isEmpty()) {
-            bundle->series->replace(points);
-
-            // Если точки выходят за пределы часа (редко, но бывает), расширяем
-            if (QDateTime::fromMSecsSinceEpoch(points.first().x()) < start) {
-                bundle->axisX->setMin(QDateTime::fromMSecsSinceEpoch(points.first().x()));
-            }
-
-            double padding = (maxY - minY) * 0.15;
-            if (padding == 0) padding = 1.0;
-            bundle->axisY->setRange(minY - padding, maxY + padding);
-        }
-        else {
-            bundle->series->clear(); // Если данных нет, очищаем старую линию
-        }
+        // Загружаем точки (линии пределов обновятся автоматически внутри компонента)
+        chartWidget->setPoints(points);
     }
 }

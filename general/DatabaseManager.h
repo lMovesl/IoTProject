@@ -77,8 +77,8 @@ public:
 private:
     explicit DatabaseManager(QObject* parent = nullptr);
     QSqlDatabase m_db;
-
 signals:
+    void sensorThresholdsChanged(int sensorId, double min, double max);
     void anomalyDetected(const QString& uid, const QString& deviceName, const QString& sensorKey, double value, const QString& type);
 };
 

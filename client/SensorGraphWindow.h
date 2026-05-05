@@ -11,22 +11,21 @@
 #include <QDateTimeEdit>
 #include <QPushButton>
 #include "DatabaseManager.h"
+#include "SensorChart.h"
 
 class SensorGraphWindow : public QDialog {
     Q_OBJECT
 public:
     explicit SensorGraphWindow(int sensorId, const QString& sensorName, QWidget* parent = nullptr);
     ~SensorGraphWindow();
-private slots:
-    void applyInterval();
+
 public slots:
+    void applyInterval();
     void appendPoint(double value, const QDateTime& timestamp);
     void loadData();
 
 private:
     int m_sensorId;
-    QLineSeries* m_series;
-    QChart* m_chart;
     QTimer* m_timer;
     QDateTime m_lastTimestamp;
     QDateTime m_start;
@@ -35,6 +34,8 @@ private:
     QDateTimeEdit* m_startEdit;
     QDateTimeEdit* m_endEdit;
     QPushButton* m_applyBtn;
+
+    SensorChart* m_sensorChart;
 };
 
 #endif

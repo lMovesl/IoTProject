@@ -317,7 +317,12 @@ bool DatabaseManager::updateSensorThresholds(int sensorId, const QVariant& minLi
     q.addBindValue(maxRate);
     q.addBindValue(sensorId);
 
-    return q.exec();
+    if (q.exec()) {
+        // Излучаем сигнал, чтобы графики узнали об обновлении
+        emit sensorThresholdsChanged(sensorId, minLimit.toDouble(), maxLimit.toDouble());
+        return true;
+    }
+    return false;
 }
 
 bool DatabaseManager::saveAlert(int sensorId, const QString& type, double value) {
