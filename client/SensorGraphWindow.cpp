@@ -78,17 +78,24 @@ void SensorGraphWindow::loadData() {
             QDateTime dt = q.value(1).toDateTime();
             dt.setTimeZone(QTimeZone::LocalTime);
 
-            // Наполняем список точек для метода replace[cite: 26]
+            // Собираем точки в список
             points.append(QPointF(dt.toMSecsSinceEpoch(), val));
             lastDt = dt;
         }
 
-        // ПЕРЕДАЕМ ДАННЫЕ В ВИДЖЕТ
+        // Передаем данные в наш компонент[cite: 30, 31]
         m_sensorChart->setXAxisRange(m_start, m_end);
         m_sensorChart->setPoints(points);
 
-        if (!lastDt.isNull()) {
-            m_lastTimestamp = lastDt;
+        // Работа с прогнозом (теперь m_series не нужен)
+        if (!points.isEmpty()) {
+            double predicted = DatabaseManager::instance().predictFutureValue(m_sensorId, 300, 10);
+            if (!std::isnan(predicted)) {
+                m_sensorChart->updatePrediction(lastDt, points.last().y(), 300, predicted);
+            }
+            else {
+                m_sensorChart->clearPrediction();
+            }
         }
     }
 }
@@ -108,5 +115,12 @@ SensorGraphWindow::~SensorGraphWindow() {
 }
 
 void SensorGraphWindow::appendPoint(double value, const QDateTime& time) {
+    // Просто вызываем метод нашего кастомного графика[cite: 30, 31]
     m_sensorChart->addPoint(time, value);
+
+    // По желанию: здесь же можно обновлять линию прогноза при каждом новом сообщении
+    double predicted = DatabaseManager::instance().predictFutureValue(m_sensorId, 300, 10);
+    if (!std::isnan(predicted)) {
+        m_sensorChart->updatePrediction(time, value, 300, predicted);
+    }
 }

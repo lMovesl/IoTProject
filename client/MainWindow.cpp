@@ -281,7 +281,18 @@ void MainWindow::handleMqttMessage(const QString& topic, const QByteArray& paylo
 
         int sensorId = DatabaseManager::instance().getOrCreateSensor(deviceId, sensorKey, unit);
         if (m_openGraphs.contains(sensorId)) {
-            m_openGraphs[sensorId]->appendPoint(value, ts);
+            auto* graph = m_openGraphs[sensorId];
+            graph->appendPoint(value, ts);
+
+            double predicted = DatabaseManager::instance().predictFutureValue(sensorId, 300, 10);
+
+            if (!std::isnan(predicted)) {
+                // Используем метод доступа getChart()
+                graph->getChart()->updatePrediction(ts, value, 300, predicted);
+            }
+            else {
+                graph->getChart()->clearPrediction();
+            }
         }
     }
 }

@@ -17,6 +17,9 @@ public:
     void clearData();
     void setXAxisRange(const QDateTime& start, const QDateTime& end);
     void setPoints(const QList<QPointF>& points);
+    void updatePrediction(const QDateTime& currentTime, double currentValue,
+        int futureSeconds, double predictedValue);
+    void clearPrediction();
 public slots:
     void onThresholdsUpdated(int sensorId, double min, double max);
 private:
@@ -24,6 +27,7 @@ private:
     QLineSeries* m_series;
     QLineSeries* m_minLine;
     QLineSeries* m_maxLine;
+    QLineSeries* m_predictSeries;
     QDateTimeAxis* m_axisX;
     QValueAxis* m_axisY;
     int m_sensorId;

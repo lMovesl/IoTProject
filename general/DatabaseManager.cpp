@@ -246,6 +246,22 @@ void DatabaseManager::processCombinedJson(const QString& uniqueId, const QByteAr
                     }
                 }
             }
+
+            double predictedValue = predictFutureValue(sensorId, 300, 10);
+
+            if (!std::isnan(predictedValue)) {
+                // Проверяем прогноз на превышение верхнего порога
+                // Условие: сейчас значение В НОРМЕ, но прогноз показывает АВАРИЮ
+                if (!maxLimit.isNull() && newValue <= maxLimit.toDouble() && predictedValue > maxLimit.toDouble()) {
+                    saveAlert(sensorId, "PREDICT_MAX", predictedValue);
+                    emit anomalyDetected(uniqueId, deviceName, sensorKey, predictedValue, "PREDICT_MAX");
+                }
+                // Проверяем прогноз на пробитие нижнего порога
+                else if (!minLimit.isNull() && newValue >= minLimit.toDouble() && predictedValue < minLimit.toDouble()) {
+                    saveAlert(sensorId, "PREDICT_MIN", predictedValue);
+                    emit anomalyDetected(uniqueId, deviceName, sensorKey, predictedValue, "PREDICT_MIN");
+                }
+            }
         }
 
         // 3. Сохраняем новое значение в историю[cite: 1]
@@ -370,4 +386,48 @@ QList<AlertRecord> DatabaseManager::getAlertHistory(int limit) {
         }
     }
     return list;
+}
+
+double DatabaseManager::predictFutureValue(int sensorId, int futureSeconds, int pointsCount) {
+    QSqlQuery q(m_db);
+    // Берем последние N точек
+    q.prepare("SELECT value, UNIX_TIMESTAMP(timestamp) FROM sensor_data "
+        "WHERE sensor_id = ? ORDER BY timestamp DESC LIMIT ?");
+    q.addBindValue(sensorId);
+    q.addBindValue(pointsCount);
+
+    if (!q.exec()) return qQNaN();
+
+    QList<QPointF> data;
+    while (q.next()) {
+        // Добавляем в начало списка, чтобы восстановить хронологический порядок (от старых к новым)
+        data.prepend(QPointF(q.value(1).toDouble(), q.value(0).toDouble()));
+    }
+
+    if (data.size() < 3) return qQNaN(); // Слишком мало данных для тренда
+
+    int n = data.size();
+    double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+
+    // Нормализуем X (время), вычитая первую метку, чтобы избежать переполнения float при умножении огромных timestamp
+    double startX = data.first().x();
+
+    for (int i = 0; i < n; ++i) {
+        double x = data[i].x() - startX;
+        double y = data[i].y();
+        sumX += x;
+        sumY += y;
+        sumXY += x * y;
+        sumX2 += x * x;
+    }
+
+    double denominator = (n * sumX2 - sumX * sumX);
+    if (denominator == 0) return data.last().y(); // Данные идут строго в одну секунду, предсказываем текущее значение
+
+    double m = (n * sumXY - sumX * sumY) / denominator;
+    double b = (sumY - m * sumX) / n;
+
+    // Предсказываем значение для будущего времени (текущее время последней точки + futureSeconds)
+    double futureX = (data.last().x() - startX) + futureSeconds;
+    return m * futureX + b;
 }

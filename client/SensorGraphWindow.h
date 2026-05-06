@@ -18,7 +18,7 @@ class SensorGraphWindow : public QDialog {
 public:
     explicit SensorGraphWindow(int sensorId, const QString& sensorName, QWidget* parent = nullptr);
     ~SensorGraphWindow();
-
+    SensorChart* getChart() { return m_sensorChart; }
 public slots:
     void applyInterval();
     void appendPoint(double value, const QDateTime& timestamp);
@@ -34,7 +34,6 @@ private:
     QDateTimeEdit* m_startEdit;
     QDateTimeEdit* m_endEdit;
     QPushButton* m_applyBtn;
-
     SensorChart* m_sensorChart;
 };
 

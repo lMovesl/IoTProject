@@ -119,11 +119,15 @@ void DeviceInfoWidget::updateSensorChartData(int sensorId) {
             points.append(QPointF(msecs, val));
         }
 
-        // Фиксируем диапазон оси X на последний час
         QDateTime now = QDateTime::currentDateTime();
-        chartWidget->setXAxisRange(now.addSecs(-3600), now);
+        chartWidget->setXAxisRange(now.addSecs(-1800), now.addSecs(300));
 
-        // Загружаем точки (линии пределов обновятся автоматически внутри компонента)
         chartWidget->setPoints(points);
+
+        // Сразу вызываем расчет прогноза для визуализации в реальном времени
+        double pred = DatabaseManager::instance().predictFutureValue(sensorId, 300, 10);
+        if (!std::isnan(pred) && !points.isEmpty()) {
+            chartWidget->updatePrediction(now, points.last().y(), 300, pred);
+        }
     }
 }

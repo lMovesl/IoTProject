@@ -74,6 +74,8 @@ public:
 
     SensorInfo getSensorSettings(int sensorId);
     bool updateSensorThresholds(int sensorId, const QVariant& minLimit, const QVariant& maxLimit, const QVariant& maxRate);
+
+    double predictFutureValue(int sensorId, int futureSeconds = 300, int pointsCount = 10);
 private:
     explicit DatabaseManager(QObject* parent = nullptr);
     QSqlDatabase m_db;

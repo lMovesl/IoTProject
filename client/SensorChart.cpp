@@ -21,9 +21,17 @@ SensorChart::SensorChart(const QString& title, int sensorId, QWidget* parent) : 
     redDash.setStyle(Qt::DashLine);
     m_maxLine->setPen(redDash);
 
+    m_predictSeries = new QLineSeries();
+    m_predictSeries->setName("Прогноз (тренд)");
+    QPen predictPen(Qt::magenta); // Цвет прогноза
+    predictPen.setWidth(3);
+    predictPen.setStyle(Qt::DashLine);
+    m_predictSeries->setPen(predictPen);
+
     m_chart->addSeries(m_series);
     m_chart->addSeries(m_minLine);
     m_chart->addSeries(m_maxLine);
+    m_chart->addSeries(m_predictSeries);
 
     m_axisX = new QDateTimeAxis();
     m_axisX->setFormat("HH:mm:ss");
@@ -38,6 +46,8 @@ SensorChart::SensorChart(const QString& title, int sensorId, QWidget* parent) : 
     m_minLine->attachAxis(m_axisY);
     m_maxLine->attachAxis(m_axisX);
     m_maxLine->attachAxis(m_axisY);
+    m_predictSeries->attachAxis(m_axisX);
+    m_predictSeries->attachAxis(m_axisY);
 
     setChart(m_chart);
     setRenderHint(QPainter::Antialiasing);
@@ -62,16 +72,15 @@ void SensorChart::addPoint(const QDateTime& time, double value) {
     qint64 msecs = time.toMSecsSinceEpoch();
     m_series->append(msecs, value);
 
-    // Логика масштабирования
-    if (m_series->count() == 1) {
-        m_axisX->setRange(time, time.addSecs(30));
+    // Сдвигаем окно просмотра: 
+    // Минимум — 10 минут назад, Максимум — 3 минуты в будущее (запас под прогноз)
+    m_axisX->setRange(time.addSecs(-600), time.addSecs(180));
+
+    // Автомасштаб по Y с небольшим отступом
+    if (value > m_axisY->max() || value < m_axisY->min()) {
         m_axisY->setRange(value - 10, value + 10);
     }
-    else {
-        if (time > m_axisX->max()) m_axisX->setMax(time);
-        if (value > m_axisY->max()) m_axisY->setMax(value + 2);
-        if (value < m_axisY->min()) m_axisY->setMin(value - 2);
-    }
+
     updateThresholdPositions();
 }
 
@@ -115,5 +124,30 @@ void SensorChart::setPoints(const QList<QPointF>& points) {
 void SensorChart::onThresholdsUpdated(int sensorId, double min, double max) {
     if (sensorId == m_sensorId) {
         setThresholds(min, max);
+    }
+}
+
+void SensorChart::updatePrediction(const QDateTime& currentTime, double currentValue,
+    int futureSeconds, double predictedValue) {
+    if (!m_axisX) return;
+
+    m_predictSeries->clear();
+    QDateTime futureTime = currentTime.addSecs(futureSeconds);
+
+    m_predictSeries->append(currentTime.toMSecsSinceEpoch(), currentValue);
+    m_predictSeries->append(futureTime.toMSecsSinceEpoch(), predictedValue);
+
+    // Если прогноз выходит за текущий видимый диапазон, расширяем его еще чуть дальше
+    if (m_axisX->max() < futureTime) {
+        m_axisX->setMax(futureTime.addSecs(60)); // Запас в 1 минуту после конца прогноза
+    }
+
+    // Корректируем ось Y, если прогноз очень высокий или низкий
+    if (predictedValue > m_axisY->max()) m_axisY->setMax(predictedValue + 5);
+    if (predictedValue < m_axisY->min()) m_axisY->setMin(predictedValue - 5);
+}
+void SensorChart::clearPrediction() {
+    if (m_predictSeries) {
+        m_predictSeries->clear();
     }
 }
