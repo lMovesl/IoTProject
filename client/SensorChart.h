@@ -20,8 +20,15 @@ public:
     void updatePrediction(const QDateTime& currentTime, double currentValue,
         int futureSeconds, double predictedValue);
     void clearPrediction();
+    void resetZoom();
 public slots:
     void onThresholdsUpdated(int sensorId, double min, double max);
+    void handlePointHovered(const QPointF& point, bool state);
+
+protected:
+    void wheelEvent(QWheelEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+
 private:
     QChart* m_chart;
     QLineSeries* m_series;
@@ -31,6 +38,8 @@ private:
     QDateTimeAxis* m_axisX;
     QValueAxis* m_axisY;
     int m_sensorId;
+
+    bool m_isZoomed = false;
 
     void updateThresholdPositions();
 };

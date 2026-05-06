@@ -120,14 +120,27 @@ void DeviceInfoWidget::updateSensorChartData(int sensorId) {
         }
 
         QDateTime now = QDateTime::currentDateTime();
-        chartWidget->setXAxisRange(now.addSecs(-1800), now.addSecs(300));
 
-        chartWidget->setPoints(points);
+        if (!points.isEmpty()) {
+            QDateTime lastTime = QDateTime::fromMSecsSinceEpoch(points.last().x());
 
-        // Сразу вызываем расчет прогноза для визуализации в реальном времени
-        double pred = DatabaseManager::instance().predictFutureValue(sensorId, 300, 10);
-        if (!std::isnan(pred) && !points.isEmpty()) {
-            chartWidget->updatePrediction(now, points.last().y(), 300, pred);
+            // Если данных нет больше минуты, не показываем прогноз
+            if (lastTime.secsTo(now) < 60) {
+                double pred = DatabaseManager::instance().predictFutureValue(sensorId, 300, 10);
+                if (!std::isnan(pred)) {
+                    m_sensorCharts[sensorId]->updatePrediction(lastTime, points.last().y(), 300, pred);
+                }
+                else {
+                    m_sensorCharts[sensorId]->clearPrediction(); 
+                }
+            }
+            else {
+                m_sensorCharts[sensorId]->clearPrediction(); 
+            }
         }
+
+        // Установка диапазона оси X (с запасом в будущее)
+        m_sensorCharts[sensorId]->setXAxisRange(now.addSecs(-1800), now.addSecs(300));
+        m_sensorCharts[sensorId]->setPoints(points);
     }
 }

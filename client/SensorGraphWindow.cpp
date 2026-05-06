@@ -89,13 +89,30 @@ void SensorGraphWindow::loadData() {
 
         // Работа с прогнозом (теперь m_series не нужен)
         if (!points.isEmpty()) {
-            double predicted = DatabaseManager::instance().predictFutureValue(m_sensorId, 300, 10);
-            if (!std::isnan(predicted)) {
-                m_sensorChart->updatePrediction(lastDt, points.last().y(), 300, predicted);
+            QDateTime lastTime = QDateTime::fromMSecsSinceEpoch(points.last().x());
+            QDateTime currentTime = QDateTime::currentDateTime();
+
+            // ПОРОГ АКТУАЛЬНОСТИ: 60 секунд (можно настроить)
+            int staleThresholdSeconds = 60;
+
+            if (lastTime.secsTo(currentTime) > staleThresholdSeconds) {
+                // Данные слишком старые — удаляем прогноз с графика
+                m_sensorChart->clearPrediction(); 
             }
             else {
-                m_sensorChart->clearPrediction();
+                // Данные свежие — рассчитываем и рисуем прогноз
+                double predicted = DatabaseManager::instance().predictFutureValue(m_sensorId, 300, 10);
+
+                if (!std::isnan(predicted)) {
+                    m_sensorChart->updatePrediction(lastTime, points.last().y(), 300, predicted); 
+                }
+                else {
+                    m_sensorChart->clearPrediction(); 
+                }
             }
+        }
+        else {
+            m_sensorChart->clearPrediction();
         }
     }
 }

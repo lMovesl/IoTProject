@@ -87,10 +87,11 @@ void MainWindow::setupLayout()
 
     QDockWidget* logDock = new QDockWidget("Журнал событий", this);
     logDock->setWidget(m_alertLog);
-    logDock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::RightDockWidgetArea);
+    logDock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
 
     m_dock = new QDockWidget(tr("Устройства"), this);
     m_dock->setWidget(dockContainer);
+    m_dock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
     addDockWidget(Qt::LeftDockWidgetArea, m_dock);
     addDockWidget(Qt::BottomDockWidgetArea, logDock);
 
