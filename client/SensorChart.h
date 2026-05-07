@@ -17,18 +17,19 @@ public:
     void clearData();
     void setXAxisRange(const QDateTime& start, const QDateTime& end);
     void setPoints(const QList<QPointF>& points);
-    void updatePrediction(const QDateTime& currentTime, double currentValue,
-        int futureSeconds, double predictedValue);
+    void updatePrediction(const QDateTime& currentTime, double currentValue, int futureSeconds, double predictedValue);
     void clearPrediction();
     void resetZoom();
+
+    void setUnit(const QString& unit);
 public slots:
     void onThresholdsUpdated(int sensorId, double min, double max);
-    void handlePointHovered(const QPointF& point, bool state);
-
 protected:
+    bool event(QEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
-
+    void mouseMoveEvent(QMouseEvent* event) override; // <--- Добавить это
+    void leaveEvent(QEvent* event) override;
 private:
     QChart* m_chart;
     QLineSeries* m_series;
@@ -37,9 +38,27 @@ private:
     QLineSeries* m_predictSeries;
     QDateTimeAxis* m_axisX;
     QValueAxis* m_axisY;
+
+    QLineSeries* m_cursorLine; // Линия, следующая за мышью
+    QPointF m_currentTooltipPoint; // Для отслеживания точки, которая уже показана
+
     int m_sensorId;
 
+    QString m_unit;               // Единица измерения
+    double m_minLimit = 0.0;      // Нижний предел
+    double m_maxLimit = 0.0;      // Верхний предел
+    bool m_hasPrediction = false; // Есть ли актуальный прогноз
+    double m_predictedValue = 0.0;// Значение прогноза
+    QDateTime m_predictionTime;
+
     bool m_isZoomed = false;
+
+    QDateTime m_baseXStart;
+    QDateTime m_baseXEnd;
+
+    bool m_isMouseOver = false; // Флаг: находится ли мышь над линией
+    QPointF m_lastHoverPoint;
+    void showTooltip(const QPointF& point);
 
     void updateThresholdPositions();
 };

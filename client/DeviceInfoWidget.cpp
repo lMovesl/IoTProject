@@ -10,19 +10,35 @@ DeviceInfoWidget::DeviceInfoWidget(QWidget* parent) : QWidget(parent) {
 
 void DeviceInfoWidget::setupUI() {
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
+    QHBoxLayout* headerLayout = new QHBoxLayout();
+
+    m_intervalCombo = new QComboBox(this);
+    m_intervalCombo->addItem("15 минут", 900);
+    m_intervalCombo->addItem("1 час", 3600);
+    m_intervalCombo->addItem("3 часа", 10800);
+    m_intervalCombo->addItem("12 часов", 43200);
+    m_intervalCombo->addItem("Сутки", 86400);
+    m_intervalCombo->setCurrentIndex(1); // По умолчанию "1 час"
 
     m_infoLabel = new QLabel("Выберите устройство в дереве", this);
     m_infoLabel->setStyleSheet("font-size: 18px; font-weight: bold; margin-bottom: 10px;");
-    mainLayout->addWidget(m_infoLabel);
+    
+    headerLayout->addWidget(m_infoLabel);
+    headerLayout->addStretch();
+    headerLayout->addWidget(new QLabel("Интервал:", this));
+    headerLayout->addWidget(m_intervalCombo);
+
+    mainLayout->addLayout(headerLayout);
 
     m_sensorsTable = new QTableWidget(0, 3, this);
-    m_sensorsTable->setHorizontalHeaderLabels({ "Датчик", "Значение", "Среднее (за час)" });
+    m_sensorsTable->setHorizontalHeaderLabels({ "Датчик", "Текущее", "Среднее" }); // Убрали "(за час)"
     m_sensorsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_sensorsTable->setFixedHeight(150);
     m_sensorsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     mainLayout->addWidget(m_sensorsTable);
 
-    mainLayout->addWidget(new QLabel("История за последний час:", this));
+    // Изменили текст на более универсальный
+    mainLayout->addWidget(new QLabel("История показаний (по выбранному интервалу):", this));
 
     QScrollArea* scrollArea = new QScrollArea(this);
     scrollArea->setWidgetResizable(true);
@@ -34,6 +50,9 @@ void DeviceInfoWidget::setupUI() {
     scrollArea->setWidget(container);
 
     mainLayout->addWidget(scrollArea);
+
+    connect(m_intervalCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+        this, &DeviceInfoWidget::onIntervalChanged);
 }
 
 void DeviceInfoWidget::setDevice(int deviceId, const QString& name) {
@@ -60,8 +79,9 @@ void DeviceInfoWidget::updateData() {
         double avgVal = 0.0;
         QSqlQuery qAvg(DatabaseManager::instance().database());
         qAvg.prepare("SELECT AVG(value) FROM sensor_data "
-            "WHERE sensor_id = ? AND timestamp > NOW() - INTERVAL 1 HOUR");
+            "WHERE sensor_id = ? AND timestamp > DATE_SUB(NOW(), INTERVAL ? SECOND)");
         qAvg.addBindValue(s.id);
+        qAvg.addBindValue(m_currentIntervalSeconds);
         if (qAvg.exec() && qAvg.next()) {
             avgVal = qAvg.value(0).toDouble();
         }
@@ -92,7 +112,7 @@ void DeviceInfoWidget::createSensorChart(int sensorId, const QString& name, cons
     // Используем наш унифицированный компонент
     SensorChart* chartWidget = new SensorChart(name + " (" + unit + ")", sensorId, this);
     chartWidget->setMinimumHeight(220);
-
+    chartWidget->setUnit(unit);
     // Загружаем пределы из БД и передаем в график[cite: 19, 20]
     SensorInfo info = DatabaseManager::instance().getSensorSettings(sensorId);
     chartWidget->setThresholds(info.minLimit, info.maxLimit);
@@ -107,9 +127,10 @@ void DeviceInfoWidget::updateSensorChartData(int sensorId) {
 
     QSqlQuery q(DatabaseManager::instance().database());
     q.prepare("SELECT value, UNIX_TIMESTAMP(timestamp) FROM sensor_data "
-        "WHERE sensor_id = ? AND timestamp > NOW() - INTERVAL 1 HOUR "
+        "WHERE sensor_id = ? AND timestamp > UNIX_TIMESTAMP(NOW()) - ? "
         "ORDER BY timestamp ASC");
     q.addBindValue(sensorId);
+    q.addBindValue(m_currentIntervalSeconds); 
 
     if (q.exec()) {
         QList<QPointF> points;
@@ -139,8 +160,19 @@ void DeviceInfoWidget::updateSensorChartData(int sensorId) {
             }
         }
 
-        // Установка диапазона оси X (с запасом в будущее)
-        m_sensorCharts[sensorId]->setXAxisRange(now.addSecs(-1800), now.addSecs(300));
+        m_sensorCharts[sensorId]->setXAxisRange(now.addSecs(-m_currentIntervalSeconds), now.addSecs(300));
         m_sensorCharts[sensorId]->setPoints(points);
     }
+}
+
+void DeviceInfoWidget::onIntervalChanged(int index) {
+    // Получаем секунды из UserData элемента[cite: 6]
+    m_currentIntervalSeconds = m_intervalCombo->itemData(index).toInt();
+
+    // Сбрасываем ручной зум, чтобы оси перенастроились под новый интервал
+    for (auto chart : m_sensorCharts.values()) {
+        chart->resetZoom();
+    }
+
+    updateData(); // Перезагружаем таблицу и графики
 }

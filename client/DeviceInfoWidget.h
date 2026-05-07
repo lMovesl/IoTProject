@@ -17,6 +17,9 @@ public:
     void setDevice(int deviceId, const QString& name);
     void updateData();
 
+public slots:
+    void onIntervalChanged(int index);
+
 private:
     void setupUI();
     void createSensorChart(int sensorId, const QString& name, const QString& unit);
@@ -28,6 +31,9 @@ private:
     QLabel* m_infoLabel;
     QTableWidget* m_sensorsTable;
     QVBoxLayout* m_chartsLayout;
+
+    QComboBox* m_intervalCombo;
+    int m_currentIntervalSeconds = 3600;
 
     // Теперь храним просто указатель на наш виджет
     QMap<int, SensorChart*> m_sensorCharts;

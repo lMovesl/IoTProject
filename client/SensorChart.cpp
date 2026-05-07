@@ -1,6 +1,7 @@
 ﻿#include "SensorChart.h"
 #include "DatabaseManager.h"
 
+#include <QLegendMarker>
 #include <QToolTip>
 
 SensorChart::SensorChart(const QString& title, int sensorId, QWidget* parent) : QChartView(parent), m_sensorId(sensorId) {
@@ -37,6 +38,7 @@ SensorChart::SensorChart(const QString& title, int sensorId, QWidget* parent) : 
 
     m_axisX = new QDateTimeAxis();
     m_axisX->setFormat("HH:mm:ss");
+    m_axisX->setTickCount(7); // Будет 6 интервалов времени
     m_chart->addAxis(m_axisX, Qt::AlignBottom);
 
     m_axisY = new QValueAxis();
@@ -51,12 +53,24 @@ SensorChart::SensorChart(const QString& title, int sensorId, QWidget* parent) : 
     m_predictSeries->attachAxis(m_axisX);
     m_predictSeries->attachAxis(m_axisY);
 
+    m_cursorLine = new QLineSeries();
+    QPen cursorPen(Qt::gray);
+    cursorPen.setWidth(1);
+    cursorPen.setStyle(Qt::DotLine); // Пунктирная линия
+    m_cursorLine->setPen(cursorPen);
+
+    m_chart->addSeries(m_cursorLine);
+    m_cursorLine->attachAxis(m_axisX);
+    m_cursorLine->attachAxis(m_axisY);
+
+    // Скрываем линию курсора из легенды, чтобы не мешалась
+    m_chart->legend()->markers(m_cursorLine).at(0)->setVisible(false);
+
     setChart(m_chart);
     setRenderHint(QPainter::Antialiasing);
     m_series->setPointsVisible(true);
     setMouseTracking(true);
 
-    connect(m_series, &QLineSeries::hovered, this, &SensorChart::handlePointHovered);
     if (m_sensorId != -1) {
         connect(&DatabaseManager::instance(), &DatabaseManager::sensorThresholdsChanged,
             this, &SensorChart::onThresholdsUpdated);
@@ -69,6 +83,9 @@ void SensorChart::setThresholds(double min, double max) {
     m_minLine->clear();
     m_maxLine->clear();
 
+    m_minLimit = min;
+    m_maxLimit = max;
+
     if (!std::isnan(min)) m_minLine->append(0, min); // Временные точки, обновятся в update
     if (!std::isnan(max)) m_maxLine->append(0, max);
 
@@ -76,16 +93,21 @@ void SensorChart::setThresholds(double min, double max) {
 }
 
 void SensorChart::addPoint(const QDateTime& time, double value) {
-    qint64 msecs = time.toMSecsSinceEpoch();
-    m_series->append(msecs, value);
+    m_series->append(time.toMSecsSinceEpoch(), value);
 
-    if (!m_isZoomed) {
-        m_axisX->setRange(time.addSecs(-600), time.addSecs(180));
+    // Сдвигаем окно, только если новая точка реально вышла за ПРАВУЮ границу
+    if (m_baseXEnd.isValid() && time > m_baseXEnd) {
+        // Вычисляем, насколько точка ушла вперед
+        qint64 diffMSecs = m_baseXEnd.msecsTo(time);
 
-        if (value > m_axisY->max() || value < m_axisY->min()) {
-            m_axisY->setRange(value - 10, value + 10);
+        // Сдвигаем обе границы на эту разницу, сохраняя ширину окна (интервал)
+        m_baseXStart = m_baseXStart.addMSecs(diffMSecs);
+        m_baseXEnd = m_baseXEnd.addMSecs(diffMSecs);
+
+        if (!m_isZoomed) {
+            m_axisX->setRange(m_baseXStart, m_baseXEnd);
+            updateThresholdPositions();
         }
-        updateThresholdPositions();
     }
 }
 
@@ -104,8 +126,13 @@ void SensorChart::updateThresholdPositions() {
 }
 
 void SensorChart::setXAxisRange(const QDateTime& start, const QDateTime& end) {
+    m_baseXStart = start;
+    m_baseXEnd = end;
+
+    // Если пользователь сейчас в режиме зума, мы обновляем базовые границы в памяти,
+    // но не трогаем саму ось, чтобы не "выбивать" его из просмотра.
     if (m_isZoomed) return;
-    
+
     m_axisX->setRange(start, end);
     updateThresholdPositions();
 }
@@ -125,6 +152,13 @@ void SensorChart::setPoints(const QList<QPointF>& points) {
         if (padding == 0) padding = 1.0;
         m_axisY->setRange(minY - padding, maxY + padding);
     }
+
+    if (m_isMouseOver) {
+        // Ищем ближайшую точку в новых данных к m_lastHoverPoint
+        // или просто перерисовываем старый текст по текущей позиции курсора
+        showTooltip(m_lastHoverPoint);
+    }
+
     updateThresholdPositions();
 }
 
@@ -134,9 +168,12 @@ void SensorChart::onThresholdsUpdated(int sensorId, double min, double max) {
     }
 }
 
-void SensorChart::updatePrediction(const QDateTime& currentTime, double currentValue,
-    int futureSeconds, double predictedValue) {
+void SensorChart::updatePrediction(const QDateTime& currentTime, double currentValue, int futureSeconds, double predictedValue) {
     if (!m_axisX) return;
+
+    m_hasPrediction = true;
+    m_predictedValue = predictedValue;
+    m_predictionTime = currentTime.addSecs(futureSeconds);
 
     m_predictSeries->clear();
     QDateTime futureTime = currentTime.addSecs(futureSeconds);
@@ -157,32 +194,13 @@ void SensorChart::updatePrediction(const QDateTime& currentTime, double currentV
 }
 void SensorChart::clearPrediction() {
     if (m_predictSeries) {
+        m_hasPrediction = false;
         m_predictSeries->clear();
     }
 }
 
-void SensorChart::handlePointHovered(const QPointF& point, bool state) {
-    if (state) {
-        // Конвертируем X (ms) в QDateTime
-        QDateTime dt = QDateTime::fromMSecsSinceEpoch(point.x());
-        QString timeStr = dt.toString("HH:mm:ss");
-
-        // Формируем текст подсказки
-        QString tooltipText = QString("Время: %1\nЗначение: %2")
-            .arg(timeStr)
-            .arg(QString::number(point.y(), 'f', 2));
-
-        // Показываем стандартный QToolTip в позиции курсора
-        QToolTip::showText(QCursor::pos(), tooltipText, this);
-    }
-    else {
-        // Прячем подсказку, когда уводим мышь
-        QToolTip::hideText();
-    }
-}
-
 void SensorChart::wheelEvent(QWheelEvent* event) {
-    m_isZoomed = true; // Как только пользователь тронул масштаб, автосдвиг отключается
+    m_isZoomed = true;
 
     if (event->angleDelta().y() > 0) {
         chart()->zoomIn();
@@ -198,8 +216,9 @@ void SensorChart::wheelEvent(QWheelEvent* event) {
 
 void SensorChart::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::RightButton) {
-        chart()->zoomReset(); // Сброс масштаба
-        m_isZoomed = false;   // Возвращаем автосдвиг за новыми данными
+        resetZoom(); // Сброс масштаба
+        event->accept();
+        return;
     }
 
     // Если была нажата левая кнопка (начало выделения рамки)
@@ -209,10 +228,148 @@ void SensorChart::mousePressEvent(QMouseEvent* event) {
 
     QChartView::mousePressEvent(event);
 }
-
 void SensorChart::resetZoom() {
     m_isZoomed = false;
-    chart()->zoomReset();
-    // Сразу вызываем обновление порогов под стандартный масштаб
+
+    // ВАЖНО: Убираем chart()->zoomReset()!
+    // Вместо этого принудительно ставим ось в границы, которые хранятся в памяти.
+    if (m_baseXStart.isValid() && m_baseXEnd.isValid()) {
+        m_axisX->setRange(m_baseXStart, m_baseXEnd);
+    }
+
+    // Опционально: делаем автозахват по Y, чтобы график не был "сплюснутым"
+    QList<QPointF> points = m_series->points();
+    if (!points.isEmpty()) {
+        double minY = points.first().y();
+        double maxY = points.first().y();
+        for (const auto& p : points) {
+            minY = std::min(minY, p.y());
+            maxY = std::max(maxY, p.y());
+        }
+        double padding = (maxY - minY) * 0.15;
+        if (padding == 0) padding = 1.0;
+        m_axisY->setRange(minY - padding, maxY + padding);
+    }
+
     updateThresholdPositions();
+}
+
+void SensorChart::setUnit(const QString& unit) {
+    m_unit = unit;
+}
+
+void SensorChart::showTooltip(const QPointF& point) {
+    qDebug() << "show";
+    QString dt = QDateTime::fromMSecsSinceEpoch(point.x()).toString("HH:mm:ss");
+    QString text = QString("<b>Время:</b> %1<br>"
+        "<b>Значение:</b> %2 %3<br>"
+        "<b>Пределы:</b> %4...%5 %3")
+        .arg(dt).arg(point.y()).arg(m_unit).arg(m_minLimit).arg(m_maxLimit);
+
+    if (m_hasPrediction) {
+        text += QString("<br><hr><b>Прогноз (%1):</b><br><font color='magenta'>%2 %3</font>")
+            .arg(m_predictionTime.toString("HH:mm:ss"))
+            .arg(m_predictedValue, 0, 'f', 2).arg(m_unit);
+    }
+
+    // Используем глобальные координаты с отступом
+    QPoint pos = QCursor::pos();
+    pos.setX(pos.x() + 15);
+    pos.setY(pos.y() - 15); // Чуть выше курсора, чтобы не перекрывать линию
+
+    QToolTip::showText(pos, text, this, rect(), 5000);
+}
+
+void SensorChart::mouseMoveEvent(QMouseEvent* event) {
+    QChartView::mouseMoveEvent(event); // Важно для зума
+
+    if (!chart()->plotArea().contains(event->pos())) {
+        m_cursorLine->setVisible(false);
+        return;
+    }
+
+    QPointF valueAtMouse = chart()->mapToValue(event->pos(), m_series);
+    const QList<QPointF> points = m_series->points();
+    if (points.isEmpty()) return;
+
+    auto it = std::lower_bound(points.begin(), points.end(), QPointF(valueAtMouse.x(), 0),
+        [](const QPointF& a, const QPointF& b) { return a.x() < b.x(); });
+
+    double targetX;
+    if (it == points.begin()) targetX = it->x();
+    else if (it == points.end()) targetX = (it - 1)->x();
+    else {
+        targetX = (qAbs((it - 1)->x() - valueAtMouse.x()) < qAbs(it->x() - valueAtMouse.x())) ? (it - 1)->x() : it->x();
+    }
+
+    m_cursorLine->replace({ QPointF(targetX, m_axisY->min()), QPointF(targetX, m_axisY->max()) });
+    m_cursorLine->setVisible(true);
+}
+
+// В .h файле: void leaveEvent(QEvent* event) override;
+void SensorChart::leaveEvent(QEvent* event) {
+    qDebug() << "hide";
+    m_cursorLine->setVisible(false);
+    QToolTip::hideText();
+    QChartView::leaveEvent(event);
+}
+
+bool SensorChart::event(QEvent* event) {
+    if (event->type() == QEvent::ToolTip) {
+        QHelpEvent* helpEvent = static_cast<QHelpEvent*>(event);
+        const QList<QPointF> points = m_series->points();
+
+        // Проверяем, что мышь внутри области графика
+        if (points.isEmpty() || !chart()->plotArea().contains(helpEvent->pos())) {
+            QToolTip::hideText();
+            return true;
+        }
+
+        // 1. Точное преобразование координат
+        // Используем mapToValue именно для этой позиции
+        QPointF valueAtMouse = chart()->mapToValue(helpEvent->pos(), m_series);
+        double mouseX = valueAtMouse.x();
+
+        // 2. Поиск ближайшей точки
+        auto it = std::lower_bound(points.begin(), points.end(), QPointF(mouseX, 0),
+            [](const QPointF& a, const QPointF& b) { return a.x() < b.x(); });
+
+        QPointF closestPoint;
+        if (it == points.begin()) closestPoint = *it;
+        else if (it == points.end()) closestPoint = *(it - 1);
+        else {
+            // Выбираем ту, что ближе по X математически
+            closestPoint = (qAbs((it - 1)->x() - mouseX) < qAbs(it->x() - mouseX)) ? *(it - 1) : *it;
+        }
+
+        // 3. Формирование текста с "квадратиками" (цвета берем из серий)
+        QString seriesColor = m_series->pen().color().name();
+        QString minColor = m_minLine->pen().color().name();
+        QString maxColor = m_maxLine->pen().color().name();
+
+        QString dt = QDateTime::fromMSecsSinceEpoch(closestPoint.x()).toString("HH:mm:ss");
+
+        QString text = QString(
+            "<span style='color:%1;'>■</span> <b>Время:</b> %2<br>"
+            "<span style='color:%1;'>■</span> <b>Значение:</b> %3 %4<br>"
+            "<hr>"
+            "<span style='color:%5;'>■</span> <b>Мин. порог:</b> %6 %4<br>"
+            "<span style='color:%7;'>■</span> <b>Макс. порог:</b> %8 %4")
+            .arg(seriesColor).arg(dt).arg(closestPoint.y()).arg(m_unit)
+            .arg(minColor).arg(m_minLimit)
+            .arg(maxColor).arg(m_maxLimit);
+
+        // Добавляем прогноз, если он есть
+        if (m_hasPrediction) {
+            QString predColor = m_predictSeries->pen().color().name();
+            text += QString("<br><span style='color:%1;'>■</span> <b>Прогноз (%2):</b> <font color='%1'>%3 %4</font>")
+                .arg(predColor)
+                .arg(m_predictionTime.toString("HH:mm:ss"))
+                .arg(m_predictedValue, 0, 'f', 2).arg(m_unit);
+        }
+
+        QToolTip::showText(helpEvent->globalPos(), text, this);
+        return true;
+    }
+    return QChartView::event(event);
 }

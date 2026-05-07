@@ -38,10 +38,10 @@ SensorGraphWindow::SensorGraphWindow(int sensorId, const QString& sensorName, QW
     intervalLayout->addWidget(m_endEdit);
     intervalLayout->addWidget(m_applyBtn);
 
-    m_sensorChart = new SensorChart("История показаний", sensorId, this);
-
     SensorInfo info = DatabaseManager::instance().getSensorSettings(m_sensorId);
-    m_sensorChart->setThresholds(info.minLimit, info.maxLimit);
+    m_sensorChart = new SensorChart("История показаний", sensorId, this);
+    m_sensorChart->setUnit(info.unit); // Установка юнита
+    m_sensorChart->setThresholds(info.minLimit, info.maxLimit); //
     // --- Main layout ----------------------------------------------------------
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->addLayout(intervalLayout);
