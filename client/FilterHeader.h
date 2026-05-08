@@ -24,7 +24,7 @@ protected:
 
         // Рисуем иконку фильтра (воронку) в правой части секции
         QRect filterRect = getFilterButtonRect(rect);
-        painter->drawPixmap(filterRect, QPixmap(":/icons/filter.png")); // Нужно добавить иконку в ресурсы
+        painter->drawPixmap(filterRect, QPixmap(":/icons/filter.svg")); // Нужно добавить иконку в ресурсы
     }
 
     void mousePressEvent(QMouseEvent* event) override {

@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file>filter.svg</file>
+        <file>filter_active.svg</file>
+    </qresource>
+</RCC>

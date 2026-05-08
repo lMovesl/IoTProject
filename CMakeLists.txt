@@ -10,11 +10,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTORCC ON)
 
 set(Qt6_DIR "C:/Qt/6.9.1/msvc2022_64/lib/cmake/Qt6")
 set(Qt6_BIN_DIR "C:/Qt/6.9.1/msvc2022_64/bin")
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Mqtt Sql Charts)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Mqtt Sql Charts SVG)
 find_package(OpenSSL REQUIRED)
 
 qt_standard_project_setup()

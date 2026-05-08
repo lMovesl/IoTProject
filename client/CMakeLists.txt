@@ -4,6 +4,7 @@ file(GLOB GENERAL_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/general/*.cpp" 
 qt_add_executable(IOTClient
     ${CLIENT_SOURCES}
     ${GENERAL_SOURCES}
+    ${CMAKE_SOURCE_DIR}/icons/resources.qrc
 )
 
 target_include_directories(IOTClient PRIVATE 
@@ -19,6 +20,7 @@ target_link_libraries(IOTClient PRIVATE
     OpenSSL::SSL 
     OpenSSL::Crypto
     Qt6::Sql
+    Qt6::Svg
     Qt6::Charts
 )
 
