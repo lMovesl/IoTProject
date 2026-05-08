@@ -38,6 +38,14 @@ struct AlertRecord {
     QString timestamp;
 };
 
+struct MeasurementEntry {
+    QString deviceName;
+    QString sensorName;
+    double value;
+    QString unit;
+    QDateTime timestamp;
+};
+
 class DatabaseManager : public QObject {
     Q_OBJECT
 public:
@@ -74,7 +82,7 @@ public:
 
     SensorInfo getSensorSettings(int sensorId);
     bool updateSensorThresholds(int sensorId, const QVariant& minLimit, const QVariant& maxLimit, const QVariant& maxRate);
-
+    QList<MeasurementEntry> getAllMeasurementsHistory(int limit);
     double predictFutureValue(int sensorId, int futureSeconds = 300, int pointsCount = 10);
 private:
     explicit DatabaseManager(QObject* parent = nullptr);

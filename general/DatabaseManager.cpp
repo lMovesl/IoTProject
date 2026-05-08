@@ -431,3 +431,27 @@ double DatabaseManager::predictFutureValue(int sensorId, int futureSeconds, int 
     double futureX = (data.last().x() - startX) + futureSeconds;
     return m * futureX + b;
 }
+
+QList<MeasurementEntry> DatabaseManager::getAllMeasurementsHistory(int limit) {
+    QList<MeasurementEntry> list;
+    QSqlQuery query;
+    query.prepare("SELECT d.name, s.sensor_key, sd.value, s.unit, sd.timestamp "
+        "FROM sensor_data sd "
+        "JOIN sensors s ON sd.sensor_id = s.id "
+        "JOIN devices d ON s.device_id = d.id "
+        "ORDER BY sd.timestamp DESC LIMIT ?");
+    query.addBindValue(limit);
+
+    if (query.exec()) {
+        while (query.next()) {
+            list.append({
+                query.value(0).toString(),
+                query.value(1).toString(),
+                query.value(2).toDouble(),
+                query.value(3).toString(),
+                query.value(4).toDateTime()
+                });
+        }
+    }
+    return list;
+}

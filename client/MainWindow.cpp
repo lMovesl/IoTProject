@@ -12,6 +12,7 @@
 #include "SensorGraphWindow.h"
 #include "SensorConfigDialog.h"
 #include "AlertHistoryWindow.h"
+#include "MeasurementHistoryWindow.h"
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
@@ -40,6 +41,12 @@ MainWindow::MainWindow(QWidget* parent)
     setupLayout();
     QMenuBar* menubar = new QMenuBar(this);
     QMenu* menu = new QMenu("Мониторинг", menubar);
+    QAction* measurmentsHistoryAction = new QAction("История измерений", menu);
+    connect(measurmentsHistoryAction, &QAction::triggered, this, [this]() {
+        MeasurementHistoryWindow historyWin(this);
+        historyWin.exec();
+        });
+
     QAction* alertsHistoryAction = new QAction("История событий", menu);
     connect(alertsHistoryAction, &QAction::triggered, this, [this]() {
         AlertHistoryWindow historyWin(this);
@@ -48,6 +55,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     setMenuBar(menubar);
     menubar->addMenu(menu);
+    menu->addAction(measurmentsHistoryAction);
     menu->addAction(alertsHistoryAction);
 
     m_model->refreshStructure();
