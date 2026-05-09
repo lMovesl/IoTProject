@@ -13,63 +13,89 @@ void DeviceInfoWidget::setupUI() {
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     QHBoxLayout* headerLayout = new QHBoxLayout();
 
-   
+    // 1. Верхняя панель управления
     m_intervalCombo = new QComboBox(this);
     m_intervalCombo->addItem("15 минут", 900);
     m_intervalCombo->addItem("1 час", 3600);
     m_intervalCombo->addItem("3 часа", 10800);
     m_intervalCombo->addItem("12 часов", 43200);
     m_intervalCombo->addItem("Сутки", 86400);
-    m_intervalCombo->setCurrentIndex(1); // По умолчанию "1 час"
+    m_intervalCombo->setCurrentIndex(1);
 
     m_infoLabel = new QLabel("Выберите устройство в дереве", this);
     m_infoLabel->setStyleSheet("font-size: 18px; font-weight: bold; margin-bottom: 10px;");
-    
+
     headerLayout->addWidget(m_infoLabel);
     headerLayout->addStretch();
     headerLayout->addWidget(new QLabel("Интервал:", this));
     headerLayout->addWidget(m_intervalCombo);
-
     mainLayout->addLayout(headerLayout);
 
-    m_sensorsTable = new QTableWidget(0, 3, this);
-    m_sensorsTable->setHorizontalHeaderLabels({ "Датчик", "Текущее", "Среднее" }); // Убрали "(за час)"
+    // 2. Настройка Dashboard (Центральная зона)
+    m_dashboard = new QMainWindow(this);
+    m_dashboard->setWindowFlags(Qt::Widget);
+
+    // Включаем все продвинутые возможности стыковки
+    m_dashboard->setDockOptions(QMainWindow::AllowNestedDocks |
+        QMainWindow::AllowTabbedDocks |
+        QMainWindow::AnimatedDocks);
+    m_dashboard->setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::South);
+
+    // Заглушка для центрального виджета (обязательна для QMainWindow)
+    QWidget* dummyCentral = new QWidget();
+    dummyCentral->setFixedSize(0, 0);
+    m_dashboard->setCentralWidget(dummyCentral);
+
+    mainLayout->addWidget(m_dashboard, 1);
+
+    // 3. Создание Таймлайна (Статус сети)
+    m_timelineDock = new QDockWidget("Статус сети", this);
+    m_timelineDock->setObjectName("TimelineDock");
+    m_timelineDock->setAllowedAreas(Qt::AllDockWidgetAreas); // Разрешаем крепить везде
+
+    m_timelineWidget = new UptimeTimelineWidget(m_timelineDock);
+    m_timelineDock->setWidget(m_timelineWidget);
+    m_dashboard->addDockWidget(Qt::TopDockWidgetArea, m_timelineDock);
+
+    // 4. Создание Таблицы (Текущие показатели)
+    m_tableDock = new QDockWidget("Текущие показатели", this);
+    m_tableDock->setObjectName("TableDock");
+    m_tableDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+
+    m_sensorsTable = new QTableWidget(0, 3, m_tableDock);
+    m_sensorsTable->setHorizontalHeaderLabels({ "Датчик", "Текущее", "Среднее" });
     m_sensorsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    m_sensorsTable->setFixedHeight(150);
     m_sensorsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_sensorsTable->setIconSize(QSize(16, 16));
     m_sensorsTable->setFocusPolicy(Qt::NoFocus);
 
-    m_timelineWidget = new UptimeTimelineWidget(this);
+    m_tableDock->setWidget(m_sensorsTable);
 
-    mainLayout->addWidget(m_timelineWidget);
-    mainLayout->addWidget(m_sensorsTable);
-    mainLayout->addWidget(new QLabel("История показаний (по выбранному интервалу):", this));
+    // Добавляем таблицу слева (она займет место рядом с таймлайном)
+    m_dashboard->addDockWidget(Qt::LeftDockWidgetArea, m_tableDock);
 
-    QScrollArea* scrollArea = new QScrollArea(this);
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setFrameShape(QFrame::NoFrame);
-
-    QWidget* container = new QWidget();
-    m_chartsLayout = new QVBoxLayout(container);
-    m_chartsLayout->setAlignment(Qt::AlignTop);
-    scrollArea->setWidget(container);
-
-    mainLayout->addWidget(scrollArea);
- 
+    // Связываем сигнал изменения интервала
     connect(m_intervalCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
         this, &DeviceInfoWidget::onIntervalChanged);
 }
 
 void DeviceInfoWidget::setDevice(int deviceId, const QString& name) {
-    if (m_currentDeviceId == deviceId) return;
+    clearCharts(); // Здесь сохранится старое состояние
 
     m_currentDeviceId = deviceId;
     m_currentDeviceName = name;
     m_infoLabel->setText("Устройство: " + name);
 
-    clearCharts(); // Очищаем старые графики при переключении устройства
-    updateData();  // Первичное заполнение
+    auto sensors = DatabaseManager::instance().getSensorsForDevice(deviceId);
+    for (const auto& s : sensors) {
+        createSensorChart(s.id, s.key, s.unit);
+    }
+
+    // 2. Восстанавливаем геометрию (вкладки, привязки)
+    if (!m_dashboardState.isEmpty()) {
+        m_dashboard->restoreState(m_dashboardState);
+    }
+
+    updateData();
 }
 
 void DeviceInfoWidget::updateData() {
@@ -146,12 +172,16 @@ void DeviceInfoWidget::updateData() {
 }
 
 void DeviceInfoWidget::clearCharts() {
-    QLayoutItem* item;
-    while ((item = m_chartsLayout->takeAt(0)) != nullptr) {
-        if (item->widget()) delete item->widget();
-        delete item;
+    // 1. Сохраняем, как всё стояло
+    if (!m_chartDocks.isEmpty()) {
+        m_dashboardState = m_dashboard->saveState();
     }
-    // m_sensorCharts очистится автоматически при удалении виджетов из layout
+
+    for (QDockWidget* dock : m_chartDocks.values()) {
+        m_dashboard->removeDockWidget(dock);
+        delete dock;
+    }
+    m_chartDocks.clear();
     m_sensorCharts.clear();
 }
 
@@ -164,8 +194,20 @@ void DeviceInfoWidget::createSensorChart(int sensorId, const QString& name, cons
     SensorInfo info = DatabaseManager::instance().getSensorSettings(sensorId);
     chartWidget->setThresholds(info.minLimit, info.maxLimit);
 
-    m_chartsLayout->addWidget(chartWidget);
+    QDockWidget* chartDock = new QDockWidget(name, this);
+    int chartIndex = m_sensorCharts.size();
+    chartDock->setObjectName(QString("ChartDock_%1").arg(chartIndex));
+    chartDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    chartDock->setFeatures(QDockWidget::DockWidgetMovable |
+        QDockWidget::DockWidgetClosable |
+        QDockWidget::DockWidgetFloatable);
+    chartDock->setWidget(chartWidget);
+
+    // Добавляем график в нижнюю зону
+    m_dashboard->addDockWidget(Qt::BottomDockWidgetArea, chartDock);
+
     m_sensorCharts.insert(sensorId, chartWidget);
+    m_chartDocks.insert(sensorId, chartDock);
 }
 
 void DeviceInfoWidget::updateSensorChartData(int sensorId) {

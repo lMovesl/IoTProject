@@ -10,6 +10,8 @@
 #include "SensorChart.h" // Наш новый компонент
 #include "DatabaseManager.h"
 #include "UptimeTimelineWidget.h"
+#include <QMainWindow>
+#include <QDockWidget>
 
 class DeviceInfoWidget : public QWidget {
     Q_OBJECT
@@ -37,10 +39,15 @@ private:
     QComboBox* m_intervalCombo;
     int m_currentIntervalSeconds = 3600;
 
+    QMainWindow* m_dashboard;             // Внутренний контейнер для перемещаемых виджетов
+    QDockWidget* m_timelineDock;          // Блок с таймлайном
+    QDockWidget* m_tableDock;
+    QMap<int, QDockWidget*> m_chartDocks;
     // Теперь храним просто указатель на наш виджет
     QMap<int, SensorChart*> m_sensorCharts;
 
     UptimeTimelineWidget* m_timelineWidget;
+    QByteArray m_dashboardState;
 };
 
 #endif
