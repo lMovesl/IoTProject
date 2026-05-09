@@ -306,9 +306,7 @@ void SensorChart::mouseMoveEvent(QMouseEvent* event) {
     m_cursorLine->setVisible(true);
 }
 
-// В .h файле: void leaveEvent(QEvent* event) override;
 void SensorChart::leaveEvent(QEvent* event) {
-    qDebug() << "hide";
     m_cursorLine->setVisible(false);
     QToolTip::hideText();
     QChartView::leaveEvent(event);
@@ -319,7 +317,6 @@ bool SensorChart::event(QEvent* event) {
         QHelpEvent* helpEvent = static_cast<QHelpEvent*>(event);
         const QList<QPointF> points = m_series->points();
 
-        // Проверяем, что мышь внутри области графика
         if (points.isEmpty() || !chart()->plotArea().contains(helpEvent->pos())) {
             QToolTip::hideText();
             return true;

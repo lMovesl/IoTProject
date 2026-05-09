@@ -4,6 +4,7 @@
 #include <QSqlQuery>
 #include <QDebug>
 
+
 DeviceInfoWidget::DeviceInfoWidget(QWidget* parent) : QWidget(parent) {
     setupUI();
 }
@@ -12,6 +13,7 @@ void DeviceInfoWidget::setupUI() {
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     QHBoxLayout* headerLayout = new QHBoxLayout();
 
+   
     m_intervalCombo = new QComboBox(this);
     m_intervalCombo->addItem("15 минут", 900);
     m_intervalCombo->addItem("1 час", 3600);
@@ -38,9 +40,10 @@ void DeviceInfoWidget::setupUI() {
     m_sensorsTable->setIconSize(QSize(16, 16));
     m_sensorsTable->setFocusPolicy(Qt::NoFocus);
 
-    mainLayout->addWidget(m_sensorsTable);
+    m_timelineWidget = new UptimeTimelineWidget(this);
 
-    // Изменили текст на более универсальный
+    mainLayout->addWidget(m_timelineWidget);
+    mainLayout->addWidget(m_sensorsTable);
     mainLayout->addWidget(new QLabel("История показаний (по выбранному интервалу):", this));
 
     QScrollArea* scrollArea = new QScrollArea(this);
@@ -71,6 +74,14 @@ void DeviceInfoWidget::setDevice(int deviceId, const QString& name) {
 
 void DeviceInfoWidget::updateData() {
     if (m_currentDeviceId == -1) return;
+
+    qint64 end = QDateTime::currentSecsSinceEpoch();
+    qint64 start = end - m_currentIntervalSeconds;
+
+    QVector<DeviceStateInterval> history = fetchDeviceUptime(m_currentDeviceId, start, end);
+
+    m_timelineWidget->setDeviceName("Время в сети");
+    m_timelineWidget->setData(history, start, end);
 
     auto sensors = DatabaseManager::instance().getSensorsForDevice(m_currentDeviceId);
     m_sensorsTable->setRowCount(0);
@@ -211,4 +222,69 @@ void DeviceInfoWidget::onIntervalChanged(int index) {
     }
 
     updateData(); // Перезагружаем таблицу и графики
+}
+
+QVector<DeviceStateInterval> DeviceInfoWidget::fetchDeviceUptime(int deviceId, qint64 rangeStart, qint64 rangeEnd) {
+    QVector<DeviceStateInterval> intervals;
+    QSqlQuery q(DatabaseManager::instance().database());
+
+    // Получаем ВСЕ отметки времени от ВСЕХ датчиков этого устройства за период
+    q.prepare("SELECT UNIX_TIMESTAMP(timestamp) FROM sensor_data "
+        "WHERE sensor_id IN (SELECT id FROM sensors WHERE device_id = ?) "
+        "AND timestamp BETWEEN FROM_UNIXTIME(?) AND FROM_UNIXTIME(?) "
+        "ORDER BY timestamp ASC");
+    q.addBindValue(deviceId);
+    q.addBindValue(rangeStart);
+    q.addBindValue(rangeEnd);
+
+    if (!q.exec()) return intervals;
+
+    const qint64 TIMEOUT = 300; // 5 минут. Если данных нет дольше - считаем оффлайном
+    qint64 currentStart = -1;
+    qint64 prevTime = -1;
+
+    while (q.next()) {
+        qint64 time = q.value(0).toLongLong();
+
+        if (currentStart == -1) {
+            // Самая первая точка в периоде
+            currentStart = time;
+            // Если первая точка появилась намного позже начала графика, значит сначала был оффлайн
+            if (currentStart - rangeStart > TIMEOUT) {
+                intervals.append({ rangeStart, currentStart, false }); // Красный
+            }
+        }
+        else {
+            // Проверяем разницу с предыдущим пакетом
+            if (time - prevTime > TIMEOUT) {
+                // Был обрыв связи! 
+                // 1. Закрываем зеленую зону (от старта до момента обрыва)
+                intervals.append({ currentStart, prevTime, true });
+                // 2. Добавляем красную зону (время, пока не было пакетов)
+                intervals.append({ prevTime, time, false });
+                // 3. Начинаем новую зеленую зону с текущей точки
+                currentStart = time;
+            }
+        }
+        prevTime = time;
+    }
+
+    // Закрываем последний кусок до правого края графика
+    if (currentStart != -1) {
+        if (rangeEnd - prevTime > TIMEOUT) {
+            // Устройство отвалилось до конца периода
+            intervals.append({ currentStart, prevTime, true });
+            intervals.append({ prevTime, rangeEnd, false });
+        }
+        else {
+            // Устройство стабильно работало до текущего момента
+            intervals.append({ currentStart, rangeEnd, true });
+        }
+    }
+    else {
+        // Если база пустая за этот период - рисуем сплошную красную линию
+        intervals.append({ rangeStart, rangeEnd, false });
+    }
+
+    return intervals;
 }

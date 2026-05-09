@@ -9,6 +9,7 @@
 #include <QMap>
 #include "SensorChart.h" // Наш новый компонент
 #include "DatabaseManager.h"
+#include "UptimeTimelineWidget.h"
 
 class DeviceInfoWidget : public QWidget {
     Q_OBJECT
@@ -25,6 +26,7 @@ private:
     void createSensorChart(int sensorId, const QString& name, const QString& unit);
     void updateSensorChartData(int sensorId);
     void clearCharts();
+    QVector<DeviceStateInterval> fetchDeviceUptime(int deviceId, qint64 rangeStart, qint64 rangeEnd);
 
     int m_currentDeviceId = -1;
     QString m_currentDeviceName;
@@ -37,6 +39,8 @@ private:
 
     // Теперь храним просто указатель на наш виджет
     QMap<int, SensorChart*> m_sensorCharts;
+
+    UptimeTimelineWidget* m_timelineWidget;
 };
 
 #endif

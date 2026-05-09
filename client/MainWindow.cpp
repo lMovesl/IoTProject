@@ -100,6 +100,7 @@ void MainWindow::setupLayout()
     m_dock = new QDockWidget(tr("Устройства"), this);
     m_dock->setWidget(dockContainer);
     m_dock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
+
     addDockWidget(Qt::LeftDockWidgetArea, m_dock);
     addDockWidget(Qt::BottomDockWidgetArea, logDock);
 
