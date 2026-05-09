@@ -3,9 +3,12 @@
 #include <QDateTime>
 #include <QSqlQuery>
 #include <QDebug>
+#include <QProgressBar>
+
 
 
 DeviceInfoWidget::DeviceInfoWidget(QWidget* parent) : QWidget(parent) {
+    m_statsUpdateTimer.start();
     setupUI();
 }
 
@@ -31,19 +34,16 @@ void DeviceInfoWidget::setupUI() {
     headerLayout->addWidget(m_intervalCombo);
     mainLayout->addLayout(headerLayout);
 
-    // 2. Настройка Dashboard (Центральная зона)
+    // 2. Настройка Dashboard (Центральная зона на базе QMainWindow)
     m_dashboard = new QMainWindow(this);
     m_dashboard->setWindowFlags(Qt::Widget);
-
-    // Включаем все продвинутые возможности стыковки
     m_dashboard->setDockOptions(QMainWindow::AllowNestedDocks |
         QMainWindow::AllowTabbedDocks |
         QMainWindow::AnimatedDocks);
     m_dashboard->setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::South);
 
-    // Заглушка для центрального виджета (обязательна для QMainWindow)
     QWidget* dummyCentral = new QWidget();
-    dummyCentral->setFixedSize(0, 0);
+    dummyCentral->setFixedSize(0, 0); // Скрываем центральный виджет, чтобы доки заняли всё место
     m_dashboard->setCentralWidget(dummyCentral);
 
     mainLayout->addWidget(m_dashboard, 1);
@@ -51,8 +51,6 @@ void DeviceInfoWidget::setupUI() {
     // 3. Создание Таймлайна (Статус сети)
     m_timelineDock = new QDockWidget("Статус сети", this);
     m_timelineDock->setObjectName("TimelineDock");
-    m_timelineDock->setAllowedAreas(Qt::AllDockWidgetAreas); // Разрешаем крепить везде
-
     m_timelineWidget = new UptimeTimelineWidget(m_timelineDock);
     m_timelineDock->setWidget(m_timelineWidget);
     m_dashboard->addDockWidget(Qt::TopDockWidgetArea, m_timelineDock);
@@ -60,18 +58,29 @@ void DeviceInfoWidget::setupUI() {
     // 4. Создание Таблицы (Текущие показатели)
     m_tableDock = new QDockWidget("Текущие показатели", this);
     m_tableDock->setObjectName("TableDock");
-    m_tableDock->setAllowedAreas(Qt::AllDockWidgetAreas);
-
     m_sensorsTable = new QTableWidget(0, 3, m_tableDock);
     m_sensorsTable->setHorizontalHeaderLabels({ "Датчик", "Текущее", "Среднее" });
     m_sensorsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_sensorsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_sensorsTable->setFocusPolicy(Qt::NoFocus);
-
     m_tableDock->setWidget(m_sensorsTable);
-
-    // Добавляем таблицу слева (она займет место рядом с таймлайном)
     m_dashboard->addDockWidget(Qt::LeftDockWidgetArea, m_tableDock);
+
+    // 5. Создание Аналитики (Статистика) с прокруткой
+    m_statsDock = new QDockWidget("Аналитика: Статистика", this);
+    m_statsDock->setObjectName("StatsDock");
+    m_statsDock->setMinimumWidth(260);
+
+    QScrollArea* statsScroll = new QScrollArea(m_statsDock);
+    statsScroll->setWidgetResizable(true);
+    statsScroll->setFrameShape(QFrame::NoFrame);
+
+    m_statsContentWidget = new QWidget();
+    m_statsMainLayout = new QVBoxLayout(m_statsContentWidget);
+    m_statsMainLayout->setAlignment(Qt::AlignTop); // Прижимаем аналитику вверх
+
+    statsScroll->setWidget(m_statsContentWidget);
+    m_statsDock->setWidget(statsScroll);
+    m_dashboard->addDockWidget(Qt::RightDockWidgetArea, m_statsDock);
 
     // Связываем сигнал изменения интервала
     connect(m_intervalCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -91,9 +100,8 @@ void DeviceInfoWidget::setDevice(int deviceId, const QString& name) {
     }
 
     // 2. Восстанавливаем геометрию (вкладки, привязки)
-    if (!m_dashboardState.isEmpty()) {
-        m_dashboard->restoreState(m_dashboardState);
-    }
+    m_statsUpdateTimer.start();
+    updateStatistics(); //
 
     updateData();
 }
@@ -168,6 +176,10 @@ void DeviceInfoWidget::updateData() {
             createSensorChart(s.id, s.key, s.unit);
         }
         updateSensorChartData(s.id);
+    }
+    if (!m_statsUpdateTimer.isValid() || m_statsUpdateTimer.hasExpired(5000)) {
+        updateStatistics();
+        m_statsUpdateTimer.restart(); // Сбрасываем счетчик
     }
 }
 
@@ -329,4 +341,113 @@ QVector<DeviceStateInterval> DeviceInfoWidget::fetchDeviceUptime(int deviceId, q
     }
 
     return intervals;
+}
+
+QWidget* DeviceInfoWidget::createMetricRow(const QString& name, double min, double max, double avg, double stdDev, const QString& unit) {
+    QWidget* row = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(row);
+    layout->setContentsMargins(5, 5, 5, 10);
+    layout->setSpacing(2);
+
+    // 1. Заголовок датчика
+    QLabel* nameLabel = new QLabel(QString("<b>%1</b>").arg(name));
+    layout->addWidget(nameLabel);
+
+    // 2. Слой с основными числами
+    QHBoxLayout* valuesLayout = new QHBoxLayout();
+    auto addVal = [&](const QString& label, double val, const QString& color) {
+        QLabel* l = new QLabel(QString("<span style='color:%3'>%1:</span> <b>%2</b>")
+            .arg(label).arg(QString::number(val, 'f', 1)).arg(color));
+        l->setStyleSheet("font-size: 11px;");
+        valuesLayout->addWidget(l);
+        };
+
+    addVal("Мин", min, "#2980b9");
+    addVal("Ср", avg, "#27ae60");
+    addVal("Макс", max, "#c0392b");
+    valuesLayout->addStretch();
+
+    // Добавляем сигму (отклонение) отдельно
+    QLabel* sigmaLabel = new QLabel(QString("σ: ±%1").arg(QString::number(stdDev, 'f', 2)));
+    sigmaLabel->setStyleSheet("color: #7f8c8d; font-size: 11px; font-style: italic;");
+    valuesLayout->addWidget(sigmaLabel);
+
+    layout->addLayout(valuesLayout);
+
+    int progressPercent = 0;
+    if (max > min) {
+        progressPercent = static_cast<int>(((avg - min) / (max - min)) * 100);
+    }
+
+    QProgressBar* rangeBar = new QProgressBar();
+    rangeBar->setTextVisible(false);
+    rangeBar->setFixedHeight(6); // Сделаем чуть толще для видимости
+
+    rangeBar->setStyleSheet(
+        "QProgressBar { "
+        "   background: #e0e0e0; "
+        "   border: none; "
+        "   border-radius: 3px; "
+        "}"
+        "QProgressBar::chunk { "
+        "   background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3498db, stop:1 #2ecc71); "
+        "   border-radius: 3px; "
+        "}"
+    );
+
+    rangeBar->setRange(0, 100);
+    rangeBar->setValue(progressPercent); // Теперь полоса показывает положение "среднего"
+
+    layout->addWidget(rangeBar);
+    return row;
+}
+
+void DeviceInfoWidget::updateStatistics() {
+    if (m_currentDeviceId == -1) return;
+
+    // Очистка
+    QLayoutItem* child;
+    while ((child = m_statsMainLayout->takeAt(0)) != nullptr) {
+        if (child->widget()) delete child->widget();
+        delete child;
+    }
+
+    auto sensors = DatabaseManager::instance().getSensorsForDevice(m_currentDeviceId);
+    for (const auto& s : sensors) {
+        QSqlQuery q(DatabaseManager::instance().database());
+        q.prepare("SELECT value FROM sensor_data WHERE sensor_id = ? AND timestamp > UNIX_TIMESTAMP(NOW()) - ?");
+        q.addBindValue(s.id);
+        q.addBindValue(m_currentIntervalSeconds);
+
+        QVector<double> values;
+        double sum = 0, minV = 99999, maxV = -99999;
+
+        if (q.exec()) {
+            while (q.next()) {
+                double v = q.value(0).toDouble();
+                values.append(v);
+                sum += v;
+                if (v < minV) minV = v;
+                if (v > maxV) maxV = v;
+            }
+        }
+
+        if (values.isEmpty()) continue;
+
+        double avg = sum / values.size();
+        double var = 0;
+        for (double v : values) var += (v - avg) * (v - avg);
+        double stdDev = std::sqrt(var / values.size());
+
+        // Добавляем компактную строку
+        m_statsMainLayout->addWidget(createMetricRow(s.key, minV, maxV, avg, stdDev, s.unit));
+
+        // Разделительная линия
+        QFrame* line = new QFrame();
+        line->setFrameShape(QFrame::HLine);
+        line->setFrameShadow(QFrame::Sunken);
+        line->setStyleSheet("color: #eeeeee;");
+        m_statsMainLayout->addWidget(line);
+    }
+    m_statsMainLayout->addStretch(); // Прижимаем всё к верху
 }

@@ -29,7 +29,14 @@ private:
     void updateSensorChartData(int sensorId);
     void clearCharts();
     QVector<DeviceStateInterval> fetchDeviceUptime(int deviceId, qint64 rangeStart, qint64 rangeEnd);
+    void updateStatistics();
+    QWidget* createMetricRow(const QString& name, double min, double max, double avg, double stdDev, const QString& unit);
 
+    QDockWidget* m_statsDock;
+    QVBoxLayout* m_statsMainLayout;
+    QElapsedTimer m_statsUpdateTimer;
+    int m_currentIntervalSeconds = 3600;
+    QWidget* m_statsContentWidget;
     int m_currentDeviceId = -1;
     QString m_currentDeviceName;
     QLabel* m_infoLabel;
@@ -37,7 +44,6 @@ private:
     QVBoxLayout* m_chartsLayout;
 
     QComboBox* m_intervalCombo;
-    int m_currentIntervalSeconds = 3600;
 
     QMainWindow* m_dashboard;             // Внутренний контейнер для перемещаемых виджетов
     QDockWidget* m_timelineDock;          // Блок с таймлайном
