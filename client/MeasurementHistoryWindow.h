@@ -15,6 +15,8 @@ class MeasurementHistoryWindow : public QDialog {
 public:
     explicit MeasurementHistoryWindow(QWidget* parent = nullptr);
 
+private slots:
+    void exportToCsv();
 private:
     void onFilterOpened(int column, QPointF pos);
     void loadHistory(); 

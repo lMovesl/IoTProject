@@ -2,6 +2,12 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QDateTime>
+#include <QMenu>
+#include <QFileDialog>
+#include <QTextStream>
+#include <QMessageBox>
+#include <QMenuBar>
+
 #include "general/DatabaseManager.h"
 
 AlertHistoryWindow::AlertHistoryWindow(QWidget* parent) : QDialog(parent) {
@@ -25,19 +31,21 @@ AlertHistoryWindow::AlertHistoryWindow(QWidget* parent) : QDialog(parent) {
     FilterHeader* header = new FilterHeader(Qt::Horizontal, m_view);
     m_view->setHorizontalHeader(header);
     m_view->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    m_view->horizontalHeader()->setStretchLastSection(true);
     m_view->setSortingEnabled(true);
     m_view->setEditTriggers(QAbstractItemView::NoEditTriggers);
-
     loadAlerts();
 
+    QMenuBar* menuBar = new QMenuBar(this);
+    QMenu* menu = new QMenu("&Файл", menuBar);
+    QAction* actionExport = new QAction("Экспорт в CSV", this);
+    menuBar->addMenu(menu);
+    menu->addAction(actionExport);
+    
+    layout->setMenuBar(menuBar);
     layout->addWidget(m_view);
 
-    // Кнопки
-    QPushButton* btnClose = new QPushButton("Закрыть");
-    connect(btnClose, &QPushButton::clicked, this, &QDialog::accept);
-    layout->addWidget(btnClose);
-
-    // Соединяем сигнал клика по иконке фильтра
+    connect(actionExport, &QAction::triggered, this, &AlertHistoryWindow::exportToCsv);
     connect(header, &FilterHeader::filterClicked, this, &AlertHistoryWindow::onFilterOpened);
 }
 
@@ -93,5 +101,36 @@ void AlertHistoryWindow::onFilterOpened(int column, QPointF pos) {
         m_currentFilters[column] = newFilter;
 
         m_proxyModel->setFilter(column, newFilter);
+    }
+}
+
+void AlertHistoryWindow::exportToCsv() {
+    QString fileName = QFileDialog::getSaveFileName(this, "Сохранить отчет",
+        "alerts_report.csv", "CSV Files (*.csv)");
+    if (fileName.isEmpty()) return;
+
+    QFile file(fileName);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&file);
+        // Записываем заголовок (BOM для корректного открытия в Excel)
+        out.setGenerateByteOrderMark(true);
+
+        QStringList headers;
+        for (int i = 0; i < m_proxyModel->columnCount(); ++i) {
+            headers << m_sourceModel->headerData(i, Qt::Horizontal).toString();
+        }
+        out << headers.join(";") << "\n";
+
+        // Записываем данные только из отфильтрованных строк
+        for (int row = 0; row < m_proxyModel->rowCount(); ++row) {
+            QStringList rowData;
+            for (int col = 0; col < m_proxyModel->columnCount(); ++col) {
+                // Берем данные из прокси-модели
+                rowData << m_proxyModel->index(row, col).data(Qt::DisplayRole).toString();
+            }
+            out << rowData.join(";") << "\n";
+        }
+        file.close();
+        QMessageBox::information(this, "Готово", "Данные успешно экспортированы.");
     }
 }

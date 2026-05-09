@@ -4,6 +4,11 @@
 #include "FilterPopup.h"
 
 #include <QLineEdit>
+#include <QMenu>
+#include <QFileDialog>
+#include <QTextStream>
+#include <QMessageBox>
+#include <QMenuBar>
 
 MeasurementHistoryWindow::MeasurementHistoryWindow(QWidget* parent) : QDialog(parent) {
     resize(1000, 600);
@@ -14,22 +19,31 @@ MeasurementHistoryWindow::MeasurementHistoryWindow(QWidget* parent) : QDialog(pa
 
     m_proxyModel = new MultiColumnFilterProxyModel(this);
     m_proxyModel->setSourceModel(m_sourceModel);
-
+    
     m_tableView = new QTableView(this);
+    FilterHeader* header = new FilterHeader(Qt::Horizontal, m_tableView);
+    m_tableView->setHorizontalHeader(header);
     m_tableView->setModel(m_proxyModel); // Ставим прокси-модель!
     m_tableView->setSortingEnabled(true); // Сортировка работает "из коробки"
     m_tableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    m_tableView->horizontalHeader()->setStretchLastSection(true);
     m_tableView->setAlternatingRowColors(true);
-
-    FilterHeader* header = new FilterHeader(Qt::Horizontal, m_tableView);
-    m_tableView->setHorizontalHeader(header);
-
-    mainLayout->addWidget(m_tableView);
     
+    QMenuBar* menuBar = new QMenuBar(this);
+    QMenu* menu = new QMenu("&Файл", menuBar);
+    QAction* actionExport = new QAction("Экспорт в CSV", this);
+    menuBar->addMenu(menu);
+    menu->addAction(actionExport);
+
+    mainLayout->setMenuBar(menuBar);
+    mainLayout->addWidget(m_tableView, 1);
+
     loadHistory();
 
+    connect(actionExport, &QAction::triggered, this, &MeasurementHistoryWindow::exportToCsv);
     connect(header, &FilterHeader::filterClicked, this, &MeasurementHistoryWindow::onFilterOpened);
 }
+
 void MeasurementHistoryWindow::loadHistory() {
     // 1. Очищаем старые данные из исходной модели
     m_sourceModel->removeRows(0, m_sourceModel->rowCount());
@@ -94,5 +108,43 @@ void MeasurementHistoryWindow::onFilterOpened(int column, QPointF pos) {
 
         m_currentFilters[column] = newFilter;
         m_proxyModel->setFilter(column, newFilter);
+    }
+}
+
+void MeasurementHistoryWindow::exportToCsv() {
+    QString fileName = QFileDialog::getSaveFileName(this, "Экспорт измерений",
+        "measurements_history.csv", "CSV Files (*.csv)");
+    if (fileName.isEmpty()) return;
+
+    QFile file(fileName);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream out(&file);
+        out.setGenerateByteOrderMark(true); // Для корректного открытия в Excel
+
+        // 1. Экспорт заголовков
+        QStringList headers;
+        for (int i = 0; i < m_proxyModel->columnCount(); ++i) {
+            headers << m_sourceModel->headerData(i, Qt::Horizontal).toString();
+        }
+        out << headers.join(";") << "\n";
+
+        // 2. Экспорт данных с учетом фильтрации и сортировки
+        // Используем rowCount именно прокси-модели
+        for (int row = 0; row < m_proxyModel->rowCount(); ++row) {
+            QStringList rowData;
+            for (int col = 0; col < m_proxyModel->columnCount(); ++col) {
+                // Получаем индекс прокси-модели
+                QModelIndex proxyIndex = m_proxyModel->index(row, col);
+                // Берем отображаемое значение
+                rowData << proxyIndex.data(Qt::DisplayRole).toString();
+            }
+            out << rowData.join(";") << "\n";
+        }
+
+        file.close();
+        QMessageBox::information(this, "Готово", "Данные успешно экспортированы.");
+    }
+    else {
+        QMessageBox::critical(this, "Ошибка", "Не удалось сохранить файл.");
     }
 }

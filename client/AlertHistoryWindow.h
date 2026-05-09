@@ -16,13 +16,12 @@ public:
 
 private slots:
     void onFilterOpened(int column, QPointF pos);
-
+    void exportToCsv(); // Слот для сохранения
 private:
     QTableView* m_view;
     QStandardItemModel* m_sourceModel;
     MultiColumnFilterProxyModel* m_proxyModel;
     QMap<int, ColumnFilter> m_currentFilters;
-
     void loadAlerts();
 };
 
