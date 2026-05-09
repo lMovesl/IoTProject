@@ -35,7 +35,7 @@ struct AlertRecord {
     QString type;
     double value;
     QString unit;
-    QString timestamp;
+    QDateTime timestamp;
 };
 
 struct MeasurementEntry {

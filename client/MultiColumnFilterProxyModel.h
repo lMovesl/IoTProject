@@ -3,6 +3,7 @@
 
 #include <QSortFilterProxyModel>
 #include <QMap>
+#include <QDateTime>
 
 enum class FilterType { List, NumericRange, DateRange };
 

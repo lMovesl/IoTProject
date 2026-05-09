@@ -381,7 +381,7 @@ QList<AlertRecord> DatabaseManager::getAlertHistory(int limit) {
                 q.value(2).toString(),
                 q.value(3).toDouble(),
                 q.value(4).toString(),
-                q.value(5).toDateTime().toString("dd.MM HH:mm:ss")
+                q.value(5).toDateTime(),
                 });
         }
     }

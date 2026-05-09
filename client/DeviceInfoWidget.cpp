@@ -35,6 +35,9 @@ void DeviceInfoWidget::setupUI() {
     m_sensorsTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_sensorsTable->setFixedHeight(150);
     m_sensorsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_sensorsTable->setIconSize(QSize(16, 16));
+    m_sensorsTable->setFocusPolicy(Qt::NoFocus);
+
     mainLayout->addWidget(m_sensorsTable);
 
     // Изменили текст на более универсальный
@@ -50,7 +53,7 @@ void DeviceInfoWidget::setupUI() {
     scrollArea->setWidget(container);
 
     mainLayout->addWidget(scrollArea);
-
+ 
     connect(m_intervalCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
         this, &DeviceInfoWidget::onIntervalChanged);
 }
@@ -76,6 +79,26 @@ void DeviceInfoWidget::updateData() {
         int row = m_sensorsTable->rowCount();
         m_sensorsTable->insertRow(row);
 
+        // --- 1. Логика тренда (Сравнение с прошлым значением) ---
+        double lastVal = 0.0;
+        double prevVal = 0.0;
+        bool hasTrend = false;
+
+        QSqlQuery qTrend(DatabaseManager::instance().database());
+        qTrend.prepare("SELECT value FROM sensor_data WHERE sensor_id = ? ORDER BY timestamp DESC LIMIT 2");
+        qTrend.addBindValue(s.id);
+
+        if (qTrend.exec()) {
+            if (qTrend.next()) {
+                lastVal = qTrend.value(0).toDouble();
+                if (qTrend.next()) {
+                    prevVal = qTrend.value(0).toDouble();
+                    hasTrend = true;
+                }
+            }
+        }
+
+        // --- 2. Расчет среднего (ваш существующий код) ---
         double avgVal = 0.0;
         QSqlQuery qAvg(DatabaseManager::instance().database());
         qAvg.prepare("SELECT AVG(value) FROM sensor_data "
@@ -86,14 +109,27 @@ void DeviceInfoWidget::updateData() {
             avgVal = qAvg.value(0).toDouble();
         }
 
+        // --- 3. Заполнение таблицы с иконками ---
         m_sensorsTable->setItem(row, 0, new QTableWidgetItem(s.key));
-        m_sensorsTable->setItem(row, 1, new QTableWidgetItem(s.lastValue + " " + s.unit));
+
+        // Колонка "Текущее" с иконкой тренда
+        QTableWidgetItem* lastItem = new QTableWidgetItem(s.lastValue + " " + s.unit);
+        if (hasTrend) {
+            if (lastVal > prevVal) {
+                lastItem->setIcon(QIcon(":/icons/green_up_arrow.png"));
+            }
+            else if (lastVal < prevVal) {
+                lastItem->setIcon(QIcon(":/icons/red_down_arrow.png"));
+            }
+        }
+        m_sensorsTable->setItem(row, 1, lastItem);
+
         m_sensorsTable->setItem(row, 2, new QTableWidgetItem(QString::number(avgVal, 'f', 2) + " " + s.unit));
 
+        // Обновление графиков
         if (!m_sensorCharts.contains(s.id)) {
             createSensorChart(s.id, s.key, s.unit);
         }
-
         updateSensorChartData(s.id);
     }
 }
