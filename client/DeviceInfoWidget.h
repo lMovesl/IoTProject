@@ -12,6 +12,14 @@
 #include "UptimeTimelineWidget.h"
 #include <QMainWindow>
 #include <QDockWidget>
+#include <QProgressBar>
+
+struct SensorStatRow {
+    QWidget* container = nullptr;
+    QLabel* valuesLabel = nullptr; // Слой с Мин/Ср/Макс
+    QLabel* sigmaLabel = nullptr;
+    QProgressBar* rangeBar = nullptr;
+};
 
 class DeviceInfoWidget : public QWidget {
     Q_OBJECT
@@ -19,11 +27,13 @@ public:
     explicit DeviceInfoWidget(QWidget* parent = nullptr);
     void setDevice(int deviceId, const QString& name);
     void updateData();
-
+    int getCurrentIDDevice() const;
 public slots:
     void onIntervalChanged(int index);
 
 private:
+  
+
     void setupUI();
     void createSensorChart(int sensorId, const QString& name, const QString& unit);
     void updateSensorChartData(int sensorId);
@@ -31,7 +41,8 @@ private:
     QVector<DeviceStateInterval> fetchDeviceUptime(int deviceId, qint64 rangeStart, qint64 rangeEnd);
     void updateStatistics();
     QWidget* createMetricRow(const QString& name, double min, double max, double avg, double stdDev, const QString& unit);
-
+    SensorStatRow createInteractiveMetricRow(const QString& name, const QString& unit);
+    QMap<int, SensorStatRow> m_sensorRows;
     QDockWidget* m_statsDock;
     QVBoxLayout* m_statsMainLayout;
     QElapsedTimer m_statsUpdateTimer;

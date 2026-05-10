@@ -183,6 +183,11 @@ void DeviceInfoWidget::updateData() {
     }
 }
 
+int DeviceInfoWidget::getCurrentIDDevice() const
+{
+    return m_currentDeviceId;
+}
+
 void DeviceInfoWidget::clearCharts() {
     // 1. Сохраняем, как всё стояло
     if (!m_chartDocks.isEmpty()) {
@@ -381,7 +386,7 @@ QWidget* DeviceInfoWidget::createMetricRow(const QString& name, double min, doub
 
     QProgressBar* rangeBar = new QProgressBar();
     rangeBar->setTextVisible(false);
-    rangeBar->setFixedHeight(6); // Сделаем чуть толще для видимости
+    rangeBar->setFixedHeight(6);
 
     rangeBar->setStyleSheet(
         "QProgressBar { "
@@ -396,7 +401,7 @@ QWidget* DeviceInfoWidget::createMetricRow(const QString& name, double min, doub
     );
 
     rangeBar->setRange(0, 100);
-    rangeBar->setValue(progressPercent); // Теперь полоса показывает положение "среднего"
+    rangeBar->setValue(progressPercent); 
 
     layout->addWidget(rangeBar);
     return row;
@@ -405,15 +410,12 @@ QWidget* DeviceInfoWidget::createMetricRow(const QString& name, double min, doub
 void DeviceInfoWidget::updateStatistics() {
     if (m_currentDeviceId == -1) return;
 
-    // Очистка
-    QLayoutItem* child;
-    while ((child = m_statsMainLayout->takeAt(0)) != nullptr) {
-        if (child->widget()) delete child->widget();
-        delete child;
-    }
-
     auto sensors = DatabaseManager::instance().getSensorsForDevice(m_currentDeviceId);
+    QSet<int> activeSensors;
+
     for (const auto& s : sensors) {
+        activeSensors.insert(s.id);
+
         QSqlQuery q(DatabaseManager::instance().database());
         q.prepare("SELECT value FROM sensor_data WHERE sensor_id = ? AND timestamp > UNIX_TIMESTAMP(NOW()) - ?");
         q.addBindValue(s.id);
@@ -421,7 +423,6 @@ void DeviceInfoWidget::updateStatistics() {
 
         QVector<double> values;
         double sum = 0, minV = 99999, maxV = -99999;
-
         if (q.exec()) {
             while (q.next()) {
                 double v = q.value(0).toDouble();
@@ -439,15 +440,79 @@ void DeviceInfoWidget::updateStatistics() {
         for (double v : values) var += (v - avg) * (v - avg);
         double stdDev = std::sqrt(var / values.size());
 
-        // Добавляем компактную строку
-        m_statsMainLayout->addWidget(createMetricRow(s.key, minV, maxV, avg, stdDev, s.unit));
+        if (!m_sensorRows.contains(s.id)) {
+            m_sensorRows[s.id] = createInteractiveMetricRow(s.key, s.unit);
+            m_statsMainLayout->insertWidget(m_statsMainLayout->count() - 1, m_sensorRows[s.id].container);
+        }
 
-        // Разделительная линия
-        QFrame* line = new QFrame();
-        line->setFrameShape(QFrame::HLine);
-        line->setFrameShadow(QFrame::Sunken);
-        line->setStyleSheet("color: #eeeeee;");
-        m_statsMainLayout->addWidget(line);
+        SensorStatRow& row = m_sensorRows[s.id];
+
+        // Обновляем текст цифр
+        row.valuesLabel->setText(QString(
+            "<span style='color:#2980b9'>Мин:</span> <b>%1</b>  "
+            "<span style='color:#27ae60'>Ср:</span> <b>%2</b>  "
+            "<span style='color:#c0392b'>Макс:</span> <b>%3</b>")
+            .arg(QString::number(minV, 'f', 1))
+            .arg(QString::number(avg, 'f', 1))
+            .arg(QString::number(maxV, 'f', 1)));
+
+        // Обновляем сигму
+        row.sigmaLabel->setText(QString("σ: ±%1").arg(QString::number(stdDev, 'f', 2)));
+
+        // Обновляем прогрессбар
+        int progressPercent = 0;
+        if (maxV > minV) {
+            progressPercent = static_cast<int>(((avg - minV) / (maxV - minV)) * 100);
+        }
+        row.rangeBar->setValue(progressPercent);
     }
-    m_statsMainLayout->addStretch(); // Прижимаем всё к верху
+
+    // (Опционально) Удаляем строки для датчиков, которые пропали
+    auto it = m_sensorRows.begin();
+    while (it != m_sensorRows.end()) {
+        if (!activeSensors.contains(it.key())) {
+            it.value().container->deleteLater();
+            it = m_sensorRows.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
+}
+
+SensorStatRow DeviceInfoWidget::createInteractiveMetricRow(const QString& name, const QString& unit) {
+    SensorStatRow row;
+    row.container = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(row.container);
+    layout->setContentsMargins(5, 5, 5, 10);
+    layout->setSpacing(2);
+
+    // 1. Заголовок датчика
+    QLabel* nameLabel = new QLabel(QString("<b>%1</b> (%2)").arg(name, unit));
+    layout->addWidget(nameLabel);
+
+    // 2. Слой с числами
+    QHBoxLayout* valuesLayout = new QHBoxLayout();
+    row.valuesLabel = new QLabel();
+    row.valuesLabel->setStyleSheet("font-size: 11px;");
+    valuesLayout->addWidget(row.valuesLabel);
+    valuesLayout->addStretch();
+
+    row.sigmaLabel = new QLabel();
+    row.sigmaLabel->setStyleSheet("color: #7f8c8d; font-size: 11px; font-style: italic;");
+    valuesLayout->addWidget(row.sigmaLabel);
+    layout->addLayout(valuesLayout);
+
+    // 3. Прогрессбар
+    row.rangeBar = new QProgressBar();
+    row.rangeBar->setTextVisible(false);
+    row.rangeBar->setFixedHeight(6);
+    row.rangeBar->setRange(0, 100);
+    row.rangeBar->setStyleSheet(
+        "QProgressBar { background: #e0e0e0; border: none; border-radius: 3px; }"
+        "QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3498db, stop:1 #2ecc71); border-radius: 3px; }"
+    );
+
+    layout->addWidget(row.rangeBar);
+    return row;
 }

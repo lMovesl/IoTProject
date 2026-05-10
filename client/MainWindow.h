@@ -29,7 +29,6 @@ private slots:
     void handleMqttMessage(const QString& topic, const QByteArray& payload);
     void openGraphWindow(int sensorId, const QString& sensorName);
     void onTreeItemClicked(const QModelIndex& index);
-    void onTreeItemDoubleClicked(const QModelIndex& index);
 private:
     // Элементы интерфейса
     QTreeView* m_treeView;

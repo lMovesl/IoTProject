@@ -76,7 +76,7 @@ try:
             print(f"[{device['name']}] T: {payload['temperature']['value']}°C, H: {payload['humidity']['value']}%")
         
         print("-" * 30)
-        time.sleep(1) 
+        time.sleep(3) 
 
 except Exception as e:
     print(f"Ошибка: {e}")

@@ -76,7 +76,8 @@ MainWindow::~MainWindow()
 void MainWindow::setupLayout()
 {
     m_alertLog = new QListWidget(this);
-    m_alertLog->setStyleSheet("QListWidget { background-color: #2b2b2b; color: #ffffff; font-family: Consolas; }");
+    //background-color: #2b2b2b;
+    m_alertLog->setStyleSheet("QListWidget { color: #ffffff; font-family: Consolas; }");
 
     // Central widget shows device information
     m_deviceInfoWidget = new DeviceInfoWidget(this);
@@ -106,7 +107,7 @@ void MainWindow::setupLayout()
 
     // Connections
     connect(m_treeView, &QTreeView::clicked, this, &MainWindow::onTreeItemClicked);
-    connect(m_treeView, &QTreeView::doubleClicked, this, &MainWindow::onTreeItemDoubleClicked);
+   // connect(m_treeView, &QTreeView::doubleClicked, this, &MainWindow::onTreeItemDoubleClicked);
     m_treeView->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_treeView, &QTreeView::customContextMenuRequested, this,
             &MainWindow::showContextMenu);
@@ -115,7 +116,7 @@ void MainWindow::setupLayout()
     connect(m_refreshTimer, &QTimer::timeout, m_deviceInfoWidget, &DeviceInfoWidget::updateData);
     connect(m_refreshTimer, &QTimer::timeout, m_model, &DeviceTreeModel::syncDevicesFromDb);
     connect(m_refreshTimer, &QTimer::timeout, m_model, &DeviceTreeModel::updateDeviceStatuses);
-    m_refreshTimer->start(2000);
+    m_refreshTimer->start(5000);
 
     setWindowTitle("IOT");
     resize(800, 600);
@@ -136,7 +137,7 @@ void MainWindow::onTreeItemClicked(const QModelIndex& index) {
 
 	deviceId = deviceItem->data(Qt::UserRole).toInt();
 
-    if (deviceId != -1 && deviceItem != nullptr) {
+    if (deviceId != -1 && deviceItem != nullptr && deviceId != m_deviceInfoWidget->getCurrentIDDevice()) {
         // Отображаем устройство в центральном виджете
         m_deviceInfoWidget->setDevice(deviceId, deviceItem->text());
         m_deviceInfoWidget->updateData();
@@ -186,6 +187,17 @@ void MainWindow::showContextMenu(const QPoint& pos)
             });
             graph->show();
         });
+
+        QAction* alertAction = menu.addAction("Установить пороговые значения");
+        connect(alertAction, &QAction::triggered, [this, sensorId]() {
+            if (sensorId > 0) {
+                SensorConfigDialog dialog(sensorId, this);
+                if (dialog.exec() == QDialog::Accepted) {
+                    // Можно обновить статус-бар или дерево, если настройки изменились
+                    m_alertLog->insertItem(0, "Настройки датчика обновлены");
+                }
+            }
+            });
     }
 
     menu.exec(m_treeView->viewport()->mapToGlobal(pos));
@@ -193,16 +205,7 @@ void MainWindow::showContextMenu(const QPoint& pos)
 
 void MainWindow::onDeviceDoubleClicked(const QModelIndex& index)
 {
-    QModelIndex deviceIndex = index;
-    if (index.parent().isValid())
-        deviceIndex = index.parent();
-
-    int deviceId = deviceIndex.data(Qt::UserRole).toInt();
-    ConfigureDeviceDialog dialog(deviceId, this);
-    if (dialog.exec() == QDialog::Accepted) {
-        m_model->refreshStructure();
-        subscribeToAllDevices();
-    }
+   
 }
 
 void MainWindow::subscribeToDevice(int deviceId)
@@ -245,34 +248,40 @@ void MainWindow::subscribeToAllDevices()
 
 void MainWindow::handleMqttMessage(const QString& topic, const QByteArray& payload)
 {
-    QJsonDocument doc = QJsonDocument::fromJson(payload);
-    if (!doc.isObject()) {
-        qDebug() << "Invalid JSON payload:" << payload;
-        return;
-    }
-    QJsonObject obj = doc.object();
-
-    // Expect format: devices/<deviceId>/data
+    // 1. Проверка структуры топика (devices/<MAC>/<type>)
     QStringList parts = topic.split('/');
     if (parts.size() < 3) {
         qDebug() << "Unexpected topic format:" << topic;
         return;
     }
-    bool ok;
-    int deviceIdFromTopic = parts[1].toInt(&ok);
-    if (!ok) {
-        qDebug() << "Cannot parse deviceId from topic:" << topic;
+
+    // Извлекаем строковый идентификатор (например, MAC-адрес)
+    QString deviceMac = parts[1];
+    QString messageType = parts[2]; // 'data' или 'alerts'
+
+    // 2. Валидация JSON
+    QJsonDocument doc = QJsonDocument::fromJson(payload);
+    if (doc.isNull() || !doc.isObject()) {
+        qDebug() << "Invalid JSON payload from topic:" << topic;
+        return;
+    }
+    QJsonObject obj = doc.object();
+
+    // 3. Получение или создание ID устройства в базе по его MAC-адресу
+    // Теперь передаем deviceMac вместо всего топика
+    int deviceId = DatabaseManager::instance().getOrCreateDevice(deviceMac);
+
+    // Подписываемся, если это новое устройство
+    subscribeToDevice(deviceId);
+
+    // 4. Обработка в зависимости от типа сообщения
+    if (messageType == "alerts") {
         return;
     }
 
-    // Use full topic string as unique identifier
-    int deviceId = DatabaseManager::instance().getOrCreateDevice(topic);
-    // Ensure subscription exists
-    subscribeToDevice(deviceId);
+    // 5. Обработка данных (messageType == "data")
+    QDateTime ts = QDateTime::currentDateTime();
 
-    QDateTime ts = QDateTime::currentDateTime(); // arrival time
-
-    // Iterate over key/value pairs
     for (auto it = obj.begin(); it != obj.end(); ++it) {
         QString sensorKey = it.key();
         QJsonValue val = it.value();
@@ -284,20 +293,21 @@ void MainWindow::handleMqttMessage(const QString& topic, const QByteArray& paylo
             value = sensorObj["value"].toDouble();
             if (sensorObj.contains("unit"))
                 unit = sensorObj["unit"].toString();
-        } else {
+        }
+        else {
             value = val.toDouble();
-            unit = "?";
         }
 
+        // Сохранение и визуализация
         int sensorId = DatabaseManager::instance().getOrCreateSensor(deviceId, sensorKey, unit);
+
         if (m_openGraphs.contains(sensorId)) {
             auto* graph = m_openGraphs[sensorId];
             graph->appendPoint(value, ts);
 
+            // Логика прогнозирования
             double predicted = DatabaseManager::instance().predictFutureValue(sensorId, 300, 10);
-
             if (!std::isnan(predicted)) {
-                // Используем метод доступа getChart()
                 graph->getChart()->updatePrediction(ts, value, 300, predicted);
             }
             else {
@@ -347,16 +357,3 @@ void MainWindow::handleAlertMessage(const QByteArray& message, const QMqttTopicN
     }
 }
 
-void MainWindow::onTreeItemDoubleClicked(const QModelIndex& index) {
-    // Проверяем, что кликнули именно по датчику, а не по комнате или устройству
-    // В вашей модели это обычно определяется через custom roles или тип данных
-    int sensorId = index.data(Qt::UserRole + 1).toInt(); // Предполагаем, что ID хранится в Role
-
-    if (sensorId > 0) {
-        SensorConfigDialog dialog(sensorId, this);
-        if (dialog.exec() == QDialog::Accepted) {
-            // Можно обновить статус-бар или дерево, если настройки изменились
-            m_alertLog->insertItem(0, "Настройки датчика обновлены");
-        }
-    }
-}
