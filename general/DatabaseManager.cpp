@@ -400,7 +400,6 @@ double DatabaseManager::predictFutureValue(int sensorId, int futureSeconds, int 
 
     QList<QPointF> data;
     while (q.next()) {
-        // Добавляем в начало списка, чтобы восстановить хронологический порядок (от старых к новым)
         data.prepend(QPointF(q.value(1).toDouble(), q.value(0).toDouble()));
     }
 
@@ -422,14 +421,13 @@ double DatabaseManager::predictFutureValue(int sensorId, int futureSeconds, int 
     }
 
     double denominator = (n * sumX2 - sumX * sumX);
-    if (denominator == 0) return data.last().y(); // Данные идут строго в одну секунду, предсказываем текущее значение
+    if (denominator == 0) return data.last().y();
 
     double m = (n * sumXY - sumX * sumY) / denominator;
     double b = (sumY - m * sumX) / n;
 
-    // Предсказываем значение для будущего времени (текущее время последней точки + futureSeconds)
     double futureX = (data.last().x() - startX) + futureSeconds;
-    return m * futureX + b;
+    return m * futureX + b;  //kx + b
 }
 
 QList<MeasurementEntry> DatabaseManager::getAllMeasurementsHistory(int limit) {

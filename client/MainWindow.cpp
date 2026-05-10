@@ -343,9 +343,8 @@ void MainWindow::handleAlertMessage(const QByteArray& message, const QMqttTopicN
         double val = obj["value"].toDouble();
 
         // Формируем запись для твоего m_alertLog (созданного кодом)
-        QString logMsg = QString("[%1] MAC: %2 (%3) -> %4: %5 (Знач: %6)")
+        QString logMsg = QString("[%1] Имя: %2 -> %3: %4 (Знач: %5)")
             .arg(QTime::currentTime().toString("HH:mm:ss"))
-            .arg(deviceMac)
             .arg(devName)
             .arg(sensor)
             .arg(type)

@@ -9,41 +9,57 @@ SensorChart::SensorChart(const QString& title, int sensorId, QWidget* parent) : 
     m_chart->setTitle(title);
     m_chart->legend()->setAlignment(Qt::AlignBottom);
 
+    // 1. Настройка основной линии (Жирная, ярко-зеленая)
     m_series = new QLineSeries();
     m_series->setName("Значение");
+    QPen mainPen(QColor("#2ecc71")); // Ваш зеленый цвет
+    mainPen.setWidth(2);             // Толщина линии (2 или 3 оптимально)
+    mainPen.setCapStyle(Qt::RoundCap);
+    mainPen.setJoinStyle(Qt::RoundJoin);
+    m_series->setPen(mainPen);
+    m_series->setPointsVisible(false); // Точки на графике
 
+    // 2. Пороги (Пунктирные линии)
     m_minLine = new QLineSeries();
     m_minLine->setName("Мин. порог");
-    QPen blueDash(Qt::blue);
+    QPen blueDash(QColor("#3498db"));
     blueDash.setStyle(Qt::DashLine);
+    blueDash.setWidth(2);
     m_minLine->setPen(blueDash);
 
     m_maxLine = new QLineSeries();
     m_maxLine->setName("Макс. порог");
-    QPen redDash(Qt::red);
-    redDash.setStyle(Qt::DashLine);
+    QPen redDash(QColor("#e74c3c"));
+    redDash.setStyle(Qt::DashDotLine);
+    redDash.setWidth(2);
     m_maxLine->setPen(redDash);
 
+    // 3. Прогноз (Фиолетовый пунктир)
     m_predictSeries = new QLineSeries();
-    m_predictSeries->setName("Прогноз (тренд)");
-    QPen predictPen(Qt::magenta); // Цвет прогноза
+    m_predictSeries->setName("Прогноз");
+    QPen predictPen(QColor("#9b59b6"));
     predictPen.setWidth(3);
-    predictPen.setStyle(Qt::DashLine);
+    predictPen.setStyle(Qt::DotLine);
     m_predictSeries->setPen(predictPen);
 
+    // Добавляем все серии в график
     m_chart->addSeries(m_series);
     m_chart->addSeries(m_minLine);
     m_chart->addSeries(m_maxLine);
     m_chart->addSeries(m_predictSeries);
 
+    // 4. Настройка осей (Сетка стала видимой)
     m_axisX = new QDateTimeAxis();
     m_axisX->setFormat("HH:mm:ss");
-    m_axisX->setTickCount(7); // Будет 6 интервалов времени
+    m_axisX->setTickCount(7);
+    m_axisX->setGridLineColor(QColor("#dcdde1")); // Светло-серая сетка
     m_chart->addAxis(m_axisX, Qt::AlignBottom);
 
     m_axisY = new QValueAxis();
+    m_axisY->setGridLineColor(QColor("#dcdde1"));
     m_chart->addAxis(m_axisY, Qt::AlignLeft);
 
+    // Привязка серий к осям (ОБЯЗАТЕЛЬНО ПОСЛЕ addAxis)
     m_series->attachAxis(m_axisX);
     m_series->attachAxis(m_axisY);
     m_minLine->attachAxis(m_axisX);
@@ -53,30 +69,29 @@ SensorChart::SensorChart(const QString& title, int sensorId, QWidget* parent) : 
     m_predictSeries->attachAxis(m_axisX);
     m_predictSeries->attachAxis(m_axisY);
 
+    // 5. Вертикальная линия курсора
     m_cursorLine = new QLineSeries();
-    QPen cursorPen(Qt::gray);
+    QPen cursorPen(QColor("#7f8c8d"));
     cursorPen.setWidth(1);
-    cursorPen.setStyle(Qt::DotLine); // Пунктирная линия
+    cursorPen.setStyle(Qt::DotLine);
     m_cursorLine->setPen(cursorPen);
-
     m_chart->addSeries(m_cursorLine);
     m_cursorLine->attachAxis(m_axisX);
     m_cursorLine->attachAxis(m_axisY);
 
-    // Скрываем линию курсора из легенды, чтобы не мешалась
-    m_chart->legend()->markers(m_cursorLine).at(0)->setVisible(false);
+    // Скрываем курсор из легенды
+    auto markers = m_chart->legend()->markers(m_cursorLine);
+    if (!markers.isEmpty()) markers.at(0)->setVisible(false);
 
     setChart(m_chart);
-    setRenderHint(QPainter::Antialiasing);
-    m_series->setPointsVisible(true);
+    setRenderHint(QPainter::Antialiasing); // Сглаживание
     setMouseTracking(true);
+    setRubberBand(QChartView::RectangleRubberBand); // Зум рамкой
 
     if (m_sensorId != -1) {
         connect(&DatabaseManager::instance(), &DatabaseManager::sensorThresholdsChanged,
             this, &SensorChart::onThresholdsUpdated);
     }
-
-    setRubberBand(QChartView::RectangleRubberBand);
 }
 
 void SensorChart::setThresholds(double min, double max) {

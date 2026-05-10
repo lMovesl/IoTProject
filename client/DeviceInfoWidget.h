@@ -16,9 +16,14 @@
 
 struct SensorStatRow {
     QWidget* container = nullptr;
-    QLabel* valuesLabel = nullptr; // Слой с Мин/Ср/Макс
+    QLabel* valuesLabel = nullptr; // Основная строка (Мин/Ср/Макс)
     QLabel* sigmaLabel = nullptr;
     QProgressBar* rangeBar = nullptr;
+
+    // Новые метки под линией
+    QLabel* minScaleLabel = nullptr;
+    QLabel* maxScaleLabel = nullptr;
+    QLabel* avgScaleLabel = nullptr;
 };
 
 class DeviceInfoWidget : public QWidget {
