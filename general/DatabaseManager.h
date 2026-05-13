@@ -5,6 +5,8 @@
 #include <QObject>
 #include <QDebug>
 
+const qint64 OFFLINE_TIMEOUT = 30;
+
 struct RoomInfo {
     int id;
     QString name;

@@ -4,7 +4,7 @@
 
 UptimeTimelineWidget::UptimeTimelineWidget(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(80);
-    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 }
 
 void UptimeTimelineWidget::setData(const QVector<DeviceStateInterval>& data, qint64 rangeStart, qint64 rangeEnd) {

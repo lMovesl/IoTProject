@@ -24,8 +24,7 @@ protected:
     void dropEvent(QDropEvent* event) override;
 
 public slots:
-    void updateDevicePositionInDb(int id, QPointF pos);
-
+    void onDeviceStatusChanged(int id, bool isOnline);
 signals:
     void deviceSelected(int id, const QString& name);
 private:

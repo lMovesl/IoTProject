@@ -6,6 +6,7 @@
 #include <QDragEnterEvent>
 #include <QMimeData>
 #include <QPropertyAnimation>
+#include <general/DatabaseManager.h>
 
 FloorPlanWidget::FloorPlanWidget(QWidget* parent) : QGraphicsView(parent), m_background(nullptr) {
     m_scene = new QGraphicsScene(this);
@@ -47,27 +48,26 @@ void FloorPlanWidget::setDeviceDisabled(int id) {
 }
 
 void FloorPlanWidget::addDevice(int id, const QString& name, QPointF pos) {
-    if (m_deviceItems.contains(id)) return;
-
     DeviceItem* item = new DeviceItem(id, name, pos);
-    connect(item, &DeviceItem::positionChanged, this, &FloorPlanWidget::updateDevicePositionInDb);
-    connect(item, &DeviceItem::showInfoRequested, this, &FloorPlanWidget::deviceSelected);
-
     m_scene->addItem(item);
-    m_deviceItems.insert(id, item);
-}
+    m_deviceItems[id] = item;
+    
+    connect(item, &DeviceItem::positionChanged, this, [](int devId, QPointF newPos) {
+        DatabaseManager::instance().updateDevicePosition(devId, newPos.x(), newPos.y());
+    });
+    // Соединяем сигнал удаления
+    connect(item, &DeviceItem::removeFromMapRequested, this, [this](int devId) {
+        DatabaseManager::instance().updateDevicePosition(devId, 0, 0);
 
-void FloorPlanWidget::updateDevicePositionInDb(int id, QPointF pos) {
-    QSqlQuery query;
-    // Убедитесь, что колонки называются именно так (pos_x, pos_y)
-    query.prepare("UPDATE devices SET pos_x = :x, pos_y = :y WHERE id = :id");
-    query.bindValue(":x", pos.x());
-    query.bindValue(":y", pos.y());
-    query.bindValue(":id", id);
+        if (m_deviceItems.contains(devId)) {
+            m_scene->removeItem(m_deviceItems[devId]);
+            delete m_deviceItems.take(devId);
+        }
+        });
 
-    if (!query.exec()) {
-        qDebug() << "Ошибка сохранения координат в БД:" << query.lastError().text();
-    }
+    connect(item, &DeviceItem::showInfoRequested, this, [this](int devId, QString devName) {
+        emit deviceSelected(devId, devName); 
+        });
 }
 
 void FloorPlanWidget::setDeviceAlert(int id, bool hasAlert) {
@@ -105,13 +105,32 @@ void FloorPlanWidget::dropEvent(QDropEvent* event) {
                 int deviceId = roleDataMap[Qt::UserRole].toInt();
                 QString deviceName = roleDataMap[Qt::DisplayRole].toString();
 
-                // Переводим координаты виджета в координаты сцены
+                if (m_deviceItems.contains(deviceId)) {
+                    DeviceItem* oldItem = m_deviceItems.take(deviceId);
+                    m_scene->removeItem(oldItem);
+                    delete oldItem;
+                    qDebug() << "Дубликат удален. Перемещение устройства:" << deviceName;
+                }
+
                 QPointF scenePos = mapToScene(dropPos.toPoint());
 
                 addDevice(deviceId, deviceName, scenePos);
-                updateDevicePositionInDb(deviceId, scenePos);
+                DatabaseManager::instance().updateDevicePosition(deviceId, scenePos.x(), scenePos.y());
             }
         }
         event->acceptProposedAction();
+    }
+}
+
+void FloorPlanWidget::onDeviceStatusChanged(int id, bool isOnline) {
+    if (m_deviceItems.contains(id)) {
+        DeviceItem* item = m_deviceItems[id];
+        if (isOnline) {
+            item->setOpacity(1.0);
+            item->setBrush(QColor(46, 204, 113));
+        }
+        else {
+            item->setDisabledState();
+        }
     }
 }

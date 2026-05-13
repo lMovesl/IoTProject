@@ -147,21 +147,32 @@ void MainWindow::setupLayout()
     m_dock->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::RightDockWidgetArea | Qt::LeftDockWidgetArea);
 
     addDockWidget(Qt::LeftDockWidgetArea, m_dock);
-    addDockWidget(Qt::BottomDockWidgetArea, logDock);
+    tabifyDockWidget(m_dock, logDock);
+    m_dock->raise();
 
     connect(m_treeView, &QTreeView::clicked, this, &MainWindow::onTreeItemClicked);
     m_treeView->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_treeView, &QTreeView::customContextMenuRequested, this,
             &MainWindow::showContextMenu);
+    connect(m_model, &DeviceTreeModel::deviceStatusChanged,
+        m_deviceInfoWidget->getFloorPlan(), &FloorPlanWidget::onDeviceStatusChanged);
 
-    connect(m_refreshTimer, &QTimer::timeout, m_deviceInfoWidget, &DeviceInfoWidget::updateData);
-    connect(m_refreshTimer, &QTimer::timeout, m_model, &DeviceTreeModel::syncDevicesFromDb);
-    connect(m_refreshTimer, &QTimer::timeout, m_model, &DeviceTreeModel::updateDeviceStatuses);
-    connect(m_refreshTimer, &QTimer::timeout, this, &MainWindow::updateAllVisualStatuses);
+    connect(m_deviceInfoWidget->getFloorPlan(), &FloorPlanWidget::deviceSelected, this, [this](int id, const QString& name) {
+        m_deviceInfoWidget->setDevice(id, name);
+        });
+
+    connect(m_refreshTimer, &QTimer::timeout, this, &MainWindow::performFullUpdate);
     m_refreshTimer->start(5000);
+    performFullUpdate();
 
     setWindowTitle("IOT");
-    resize(800, 600);
+}
+
+void MainWindow::performFullUpdate() {
+    m_deviceInfoWidget->updateData();
+    m_model->syncDevicesFromDb();
+    m_model->updateDeviceStatuses(); 
+    updateAllVisualStatuses();       
 }
 
 void MainWindow::onTreeItemClicked(const QModelIndex& index) {
@@ -242,6 +253,7 @@ void MainWindow::showContextMenu(const QPoint& pos)
             ConfigureDeviceDialog dialog(deviceId, this);
             if (dialog.exec() == QDialog::Accepted) {
                 m_model->refreshStructure();
+                m_treeView->expandToDepth(0);
                 subscribeToAllDevices(); 
             }
             });

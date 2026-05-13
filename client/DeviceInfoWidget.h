@@ -65,6 +65,7 @@ private:
     FloorPlanWidget* m_floorPlan;
     QMainWindow* m_dashboard;             
     QDockWidget* m_timelineDock;          
+    QDockWidget* m_dockFloor;
     QDockWidget* m_tableDock;
     QMap<int, QDockWidget*> m_chartDocks;
     QMap<int, SensorChart*> m_sensorCharts;

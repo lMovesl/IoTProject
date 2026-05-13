@@ -16,6 +16,8 @@ public slots:
     void refreshStructure();
     void updateDeviceStatuses();
     void syncDevicesFromDb();
+signals:
+    void deviceStatusChanged(int deviceId, bool isOnline);
 private:
     void loadSensorsForNewDevice(QStandardItem* devItem, int deviceId);
 

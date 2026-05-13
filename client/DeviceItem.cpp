@@ -8,8 +8,8 @@ DeviceItem::DeviceItem(int id, const QString& name, QPointF pos, QGraphicsItem* 
     : QGraphicsEllipseItem(-12, -12, 24, 24, parent), m_id(id), m_name(name) {
 
     setPos(pos);
-    setBrush(Qt::green);
-    setPen(QPen(Qt::white, 2));
+    setBrush(QColor(46, 204, 113));
+   // setPen(QPen(Qt::white, 2));
 
     setFlags(ItemIsMovable | ItemSendsGeometryChanges | ItemIsSelectable);
     setAcceptHoverEvents(true);
@@ -36,11 +36,13 @@ void DeviceItem::hoverEnterEvent(QGraphicsSceneHoverEvent* event) {
 
 void DeviceItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
     QMenu menu;
-    QAction* infoAction = menu.addAction("Показать информацию");
-
-    // Если нажать "Показать информацию", испускаем сигнал
-    connect(infoAction, &QAction::triggered, [this]() {
+    menu.addAction("Показать информацию", [this]() {
         emit showInfoRequested(m_id, m_name);
+        });
+
+    // Новое действие
+    menu.addAction("Убрать с планировки", [this]() {
+        emit removeFromMapRequested(m_id);
         });
 
     menu.exec(event->screenPos());

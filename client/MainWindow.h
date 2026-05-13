@@ -31,6 +31,7 @@ private slots:
     void onTreeItemClicked(const QModelIndex& index);
     void onSelectFloorPlan();
     void updateAllVisualStatuses();
+    void performFullUpdate();
 private:
     QTreeView* m_treeView;
     QDockWidget* m_dock;

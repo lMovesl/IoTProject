@@ -319,13 +319,24 @@ bool DatabaseManager::isDeviceOnline(int deviceId) {
     if (!m_db.isOpen()) return false;
 
     QSqlQuery query(m_db);
-    query.prepare("SELECT is_online FROM devices WHERE id = :id");
+    // Выбираем и флаг, и время последнего сообщения
+    query.prepare("SELECT is_online, last_seen FROM devices WHERE id = :id");
     query.bindValue(":id", deviceId);
 
     if (query.exec() && query.next()) {
-        return query.value(0).toBool();
+        bool manualStatus = query.value(0).toBool();
+        auto dt = query.value(1).toDateTime();
+        dt.setTimeZone(QTimeZone(QTimeZone::LocalTime));
+        qint64 lastSeen = dt.toSecsSinceEpoch();
+        qint64 now = QDateTime::currentSecsSinceEpoch();
+
+        if (now - lastSeen > 30) {
+            return false;
+        }
+
+        return manualStatus;
     }
-    return false; // Если устройства нет или ошибка, считаем выключенным
+    return false;
 }
 
 void DatabaseManager::setDeviceOnline(int deviceId, bool isOnline) {
@@ -436,10 +447,19 @@ QList<AlertRecord> DatabaseManager::getAlertHistory(int limit) {
 }
 
 void DatabaseManager::updateLastSeen(int deviceId) {
-    QSqlQuery q(m_db);
-    q.prepare("UPDATE devices SET last_seen = CURRENT_TIMESTAMP WHERE id = :id");
-    q.bindValue(":id", deviceId);
-    q.exec();
+    if (!m_db.isOpen()) return;
+
+    QSqlQuery query(m_db);
+    qint64 now = QDateTime::currentSecsSinceEpoch();
+
+    // Используем FROM_UNIXTIME для конвертации числа в дату
+    query.prepare("UPDATE devices SET last_seen = FROM_UNIXTIME(:ts) WHERE id = :id");
+    query.bindValue(":ts", now);
+    query.bindValue(":id", deviceId);
+
+    if (!query.exec()) {
+        qWarning() << "Ошибка обновления last_seen:" << query.lastError().text();
+    }
 }
 
 double DatabaseManager::predictFutureValue(int sensorId, int futureSeconds, int pointsCount) {
@@ -507,10 +527,15 @@ QList<MeasurementEntry> DatabaseManager::getAllMeasurementsHistory(int limit) {
 }
 
 void DatabaseManager::updateDevicePosition(int id, double x, double y) {
-    QSqlQuery query;
+    if (!m_db.isOpen()) return;
+
+    QSqlQuery query(m_db);
     query.prepare("UPDATE devices SET pos_x = :x, pos_y = :y WHERE id = :id");
     query.bindValue(":x", x);
     query.bindValue(":y", y);
     query.bindValue(":id", id);
-    query.exec();
+
+    if (!query.exec()) {
+        qWarning() << "Ошибка сохранения координат:" << query.lastError().text();
+    }
 }

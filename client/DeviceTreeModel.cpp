@@ -72,6 +72,8 @@ void DeviceTreeModel::updateDeviceStatuses() {
             QApplication::style()->standardIcon(QStyle::SP_DialogNoButton);
 
         devItem->setIcon(statusIcon);
+
+        emit deviceStatusChanged(deviceId, isOnline);
     }
 }
 

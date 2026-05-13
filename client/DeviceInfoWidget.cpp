@@ -72,7 +72,7 @@ void DeviceInfoWidget::setupUI() {
     m_timelineDock->setFeatures(QDockWidget::DockWidgetMovable |
         QDockWidget::DockWidgetClosable |
         QDockWidget::DockWidgetFloatable);
-    m_dashboard->addDockWidget(Qt::TopDockWidgetArea, m_timelineDock);
+    m_dashboard->addDockWidget(Qt::LeftDockWidgetArea, m_timelineDock);
 
     m_tableDock = new QDockWidget("Текущие показатели", this);
     m_tableDock->setObjectName("TableDock");
@@ -106,12 +106,19 @@ void DeviceInfoWidget::setupUI() {
 
     statsScroll->setWidget(m_statsContentWidget);
     m_statsDock->setWidget(statsScroll);
-    m_dashboard->addDockWidget(Qt::LeftDockWidgetArea, m_statsDock);
+    //m_dashboard->addDockWidget(Qt::LeftDockWidgetArea, m_statsDock);
+    m_dashboard->splitDockWidget(m_timelineDock, m_statsDock, Qt::Vertical);
 
     m_floorPlan = new FloorPlanWidget(this);
-    QDockWidget* dockFloor = new QDockWidget;
-    dockFloor->setWidget(m_floorPlan);
-    m_dashboard->setCentralWidget(dockFloor);
+    m_dockFloor = new QDockWidget("Планировка", this);
+    m_dockFloor->setObjectName("FloorPlan");
+    m_dockFloor->setAllowedAreas(Qt::AllDockWidgetAreas);
+    m_dockFloor->setFeatures(QDockWidget::DockWidgetMovable |
+        QDockWidget::DockWidgetClosable |
+        QDockWidget::DockWidgetFloatable);
+    m_dockFloor->setWidget(m_floorPlan);
+    m_dashboard->splitDockWidget(m_statsDock, m_dockFloor, Qt::Horizontal);
+
     loadDevicesToMap();
 
     connect(m_intervalCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -422,6 +429,19 @@ QVector<DeviceStateInterval> DeviceInfoWidget::fetchDeviceUptime(int deviceId, q
     return intervals;
 }
 
+void DeviceInfoWidget::loadDevicesToMap() {
+    QList<DeviceInfo> devices = DatabaseManager::instance().getAllDevices();
+
+    for (const auto& dev : devices) {
+        if (qAbs(dev.posX) < 0.001 && qAbs(dev.posY) < 0.001) {
+            continue;
+        }
+
+        // Добавляем на карту только если координаты валидны
+        m_floorPlan->addDevice(dev.id, dev.name, QPointF(dev.posX, dev.posY));
+    }
+}
+
 QWidget* DeviceInfoWidget::createMetricRow(const QString& name, double min, double max, double avg, double stdDev, const QString& unit) {
     QWidget* row = new QWidget();
     QVBoxLayout* layout = new QVBoxLayout(row);
@@ -595,17 +615,3 @@ SensorStatRow DeviceInfoWidget::createInteractiveMetricRow(const QString& name, 
     return row;
 }
 
-void DeviceInfoWidget::loadDevicesToMap() {
-    // Получаем все устройства из БД
-    QList<DeviceInfo> devices = DatabaseManager::instance().getAllDevices();
-
-    for (const auto& dev : devices) {
-        // Если координаты (0,0), устройство считается неразмещенным (по желанию)
-        // Но лучше просто загружать всё, что есть
-        m_floorPlan->addDevice(dev.id, dev.name, QPointF(dev.posX, dev.posY));
-
-        // Устанавливаем актуальный цвет (онлайн/оффлайн)
-        bool online = DatabaseManager::instance().isDeviceOnline(dev.id);
-        m_floorPlan->setDeviceAlert(dev.id, !online);
-    }
-}

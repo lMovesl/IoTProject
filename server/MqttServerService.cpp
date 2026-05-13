@@ -47,6 +47,11 @@ void MqttServerService::onMessageReceived(const QByteArray& message, const QMqtt
         if (!DatabaseManager::instance().open()) return;
 
         DatabaseManager::instance().processCombinedJson(macAddress, message);
+
+        int deviceId = DatabaseManager::instance().getDeviceIdByMac(macAddress);
+        if (deviceId != -1) {
+            DatabaseManager::instance().updateLastSeen(deviceId);
+        }
     }
     else {
         qWarning() << "Неверный формат топика:" << topicName;

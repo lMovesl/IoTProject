@@ -19,6 +19,7 @@ public:
 signals:
     void positionChanged(int id, QPointF newPos);
     void showInfoRequested(int id, const QString& name);
+    void removeFromMapRequested(int id);
 protected:
     QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
     void hoverEnterEvent(QGraphicsSceneHoverEvent* event) override;
