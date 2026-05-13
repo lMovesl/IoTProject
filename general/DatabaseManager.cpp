@@ -286,6 +286,22 @@ QList<DeviceInfo> DatabaseManager::getAllDevices() {
     return list;
 }
 
+int DatabaseManager::getDeviceIdByMac(const QString& mac) {
+    if (!m_db.isOpen()) return -1;
+
+    QSqlQuery query(m_db);
+    // Предполагаем, что колонка с уникальным идентификатором называется unique_id
+    query.prepare("SELECT id FROM devices WHERE unique_id = :mac");
+    query.bindValue(":mac", mac);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt();
+    }
+
+    qDebug() << "Устройство с MAC" << mac << "не найдено в базе.";
+    return -1;
+}
+
 SensorInfo DatabaseManager::getSensorSettings(int sensorId) {
     SensorInfo info;
     info.id = sensorId;

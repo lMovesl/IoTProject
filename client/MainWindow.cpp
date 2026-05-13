@@ -377,10 +377,14 @@ void MainWindow::handleAlertMessage(const QByteArray& message, const QMqttTopicN
         QListWidgetItem* item = new QListWidgetItem(logMsg);
         item->setForeground(QBrush(QColor("#ff5c5c")));
         m_alertLog->insertItem(0, item);
+
+        int deviceId = DatabaseManager::instance().getDeviceIdByMac(deviceMac);
+
+        if (deviceId > 0) {
+            m_deviceInfoWidget->getFloorPlan()->setDeviceAlert(deviceId, true);
+        }
     }
 }
-
-
 
 void MainWindow::onSelectFloorPlan() {
     QString fileName = QFileDialog::getOpenFileName(this,

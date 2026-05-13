@@ -76,7 +76,7 @@ public:
     bool saveAlert(int sensorId, const QString& type, double value);
     QList<AlertRecord> getAlertHistory(int limit = 100);
     QString getDeviceNameByMac(const QString& mac);
-
+    int getDeviceIdByMac(const QString& mac);
     SensorInfo getSensorSettings(int sensorId);
     bool updateSensorThresholds(int sensorId, const QVariant& minLimit, const QVariant& maxLimit, const QVariant& maxRate);
     QList<MeasurementEntry> getAllMeasurementsHistory(int limit);
