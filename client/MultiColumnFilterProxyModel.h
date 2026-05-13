@@ -26,7 +26,6 @@ public:
 protected:
 protected:
     bool lessThan(const QModelIndex& source_left, const QModelIndex& source_right) const override {
-        // Если это колонка со значениями (2) или датой (3), сортируем по чистым данным из UserRole
         if (source_left.column() == 2 || source_left.column() == 3) {
             QVariant leftData = source_left.data(Qt::UserRole);
             QVariant rightData = source_right.data(Qt::UserRole);
@@ -39,7 +38,6 @@ protected:
             }
         }
 
-        // Для остальных колонок используем стандартную сортировку (по тексту)
         return QSortFilterProxyModel::lessThan(source_left, source_right);
     }
 
@@ -58,12 +56,11 @@ protected:
                     if (val < f.minNum || val > f.maxNum) return false;
                 }
                 else {
-                    return false; // Если данных нет, скрываем строку
+                    return false; 
                 }
             }
             else if (f.type == FilterType::DateRange) {
                 QDateTime rowDate = index.data(Qt::UserRole).toDateTime();
-                // Принудительно сравниваем в локальном времени, если фильтры из календаря локальные
                 if (rowDate < f.minDate ||
                     rowDate > f.maxDate) {
                     return false;

@@ -22,14 +22,12 @@ protected:
         QHeaderView::paintSection(painter, rect, sectionId);
         painter->restore();
 
-        // Рисуем иконку фильтра (воронку) в правой части секции
         QRect filterRect = getFilterButtonRect(rect);
-        painter->drawPixmap(filterRect, QPixmap(":/icons/filter.svg")); // Нужно добавить иконку в ресурсы
+        painter->drawPixmap(filterRect, QPixmap(":/icons/filter.svg"));
     }
 
     void mousePressEvent(QMouseEvent* event) override {
         int section = logicalIndexAt(event->pos());
-        // sectionRect возвращает координаты внутри заголовка
         QRect rect = QRect(sectionViewportPosition(section), 0, sectionSize(section), height());
 
         if (getFilterButtonRect(rect).contains(event->pos())) {

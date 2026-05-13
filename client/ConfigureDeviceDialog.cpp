@@ -7,7 +7,7 @@ ConfigureDeviceDialog::ConfigureDeviceDialog(int deviceId, QWidget* parent)
     setupUI();
     loadData();
     setWindowTitle("Настройка устройства");
-    resize(350, 200); // Сделали окно компактнее
+    resize(350, 200); 
 }
 
 void ConfigureDeviceDialog::setupUI() {
@@ -15,7 +15,7 @@ void ConfigureDeviceDialog::setupUI() {
     QFormLayout* formLayout = new QFormLayout();
 
     m_idLabel = new QLabel(this);
-    m_idLabel->setStyleSheet("color: gray;"); // Визуально выделяем, что это только для чтения
+    m_idLabel->setStyleSheet("color: gray;"); 
 
     m_nameEdit = new QLineEdit(this);
     m_nameEdit->setPlaceholderText("Введите название (напр. Лампа)");
@@ -31,7 +31,6 @@ void ConfigureDeviceDialog::setupUI() {
 
     mainLayout->addLayout(formLayout);
 
-    // Стандартные кнопки OK/Cancel
     QDialogButtonBox* buttonBox = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
 
@@ -73,20 +72,18 @@ void ConfigureDeviceDialog::onSaveClicked() {
     int roomId = -1;
     int index = m_roomCombo->findText(roomName);
 
-    // Если комнаты нет в списке — создаем её
     if (index != -1 && m_roomCombo->itemData(index).isValid()) {
         roomId = m_roomCombo->itemData(index).toInt();
     }
     else {
         if (DatabaseManager::instance().createRoom(roomName)) {
-            // Получаем ID только что созданной комнаты
             QSqlQuery q("SELECT LAST_INSERT_ID()", DatabaseManager::instance().database());
             if (q.next()) roomId = q.value(0).toInt();
         }
     }
 
     if (DatabaseManager::instance().updateDeviceConfig(m_deviceId, name, roomId)) {
-        accept(); // Закрываем диалог с успехом
+        accept();
     }
     else {
         QMessageBox::critical(this, "Ошибка", "Не удалось сохранить конфигурацию.");

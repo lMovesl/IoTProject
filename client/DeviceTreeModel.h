@@ -11,6 +11,7 @@ class DeviceTreeModel : public QStandardItemModel {
 
 public:
     explicit DeviceTreeModel(QObject* parent = nullptr);
+    Qt::DropActions supportedDragActions() const override;
 public slots:
     void refreshStructure();
     void updateDeviceStatuses();

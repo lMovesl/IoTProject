@@ -16,7 +16,7 @@ public:
 
 private slots:
     void onFilterOpened(int column, QPointF pos);
-    void exportToCsv(); // Слот для сохранения
+    void exportToCsv(); 
 private:
     QTableView* m_view;
     QStandardItemModel* m_sourceModel;

@@ -37,7 +37,6 @@ bool DatabaseManager::createRoom(const QString& name) {
     return q.exec();
 }
 
-// DatabaseManager.cpp
 QList<DeviceInfo> DatabaseManager::getDevicesByRoom(int roomId) {
     QList<DeviceInfo> list;
     QSqlQuery q(m_db);
@@ -47,7 +46,6 @@ QList<DeviceInfo> DatabaseManager::getDevicesByRoom(int roomId) {
         q.addBindValue(roomId);
     }
     else {
-        // Запрос для нераспределенных устройств
         q.prepare("SELECT id, name, unique_id FROM devices WHERE room_id IS NULL OR room_id = 0");
     }
 
@@ -68,12 +66,10 @@ bool DatabaseManager::updateDeviceConfig(int deviceId, const QString& name, int 
     return q.exec();
 }
 
-// Фрагмент обновления в DatabaseManager.cpp
 QList<SensorInfo> DatabaseManager::getSensorsForDevice(int deviceId) {
     QList<SensorInfo> list;
     QSqlQuery q(m_db);
 
-    // Добавляем новые колонки в SELECT
     QString query =
         "SELECT s.id, s.sensor_key, s.unit, sd.value, s.min_limit, s.max_limit, s.max_rate "
         "FROM sensors s "
@@ -90,7 +86,6 @@ QList<SensorInfo> DatabaseManager::getSensorsForDevice(int deviceId) {
             info.key = q.value(1).toString();
             info.unit = q.value(2).toString();
             info.lastValue = q.value(3).isNull() ? "—" : QString::number(q.value(3).toDouble(), 'f', 2);
-            // Заполняем лимиты
             info.minLimit = q.value(4).toDouble();
             info.maxLimit = q.value(5).toDouble();
             info.maxRate = q.value(6).toDouble();
@@ -110,7 +105,7 @@ QString DatabaseManager::getLastSensorValue(int sensorId) {
 
 bool DatabaseManager::saveNewDeviceToDb(const QString& name, const QString& uniqueId, int templateId)
 {
-    Q_UNUSED(templateId); // шаблон пока не используется
+    Q_UNUSED(templateId);
     QSqlQuery q(m_db);
     q.prepare("INSERT INTO devices (name, unique_id, is_configured) VALUES (?, ?, FALSE)");
     q.addBindValue(name);
@@ -133,7 +128,6 @@ int DatabaseManager::getOrCreateDevice(const QString& uniqueId) {
 
 int DatabaseManager::getOrCreateSensor(int deviceId, const QString& key, const QString& unit) {
     QSqlQuery q(m_db);
-    // Ищем датчик и сразу берем его текущую единицу измерения
     q.prepare("SELECT id, unit FROM sensors WHERE device_id = ? AND sensor_key = ?");
     q.addBindValue(deviceId);
     q.addBindValue(key);
@@ -143,8 +137,6 @@ int DatabaseManager::getOrCreateSensor(int deviceId, const QString& key, const Q
         int sensorId = q.value(0).toInt();
         QString currentUnit = q.value(1).toString();
 
-        // Если устройство прислало нормальную единицу (не "?") 
-        // и она отличается от той, что в базе — обновляем базу!
         if (unit != "?" && currentUnit != unit) {
             QSqlQuery updateQ(m_db);
             updateQ.prepare("UPDATE sensors SET unit = ? WHERE id = ?");
@@ -155,7 +147,6 @@ int DatabaseManager::getOrCreateSensor(int deviceId, const QString& key, const Q
         return sensorId;
     }
 
-    // Если датчика нет — создаем его с той единицей, что прислало устройство
     q.prepare("INSERT INTO sensors (device_id, sensor_key, unit) VALUES (?, ?, ?)");
     q.addBindValue(deviceId);
     q.addBindValue(key);
@@ -171,7 +162,6 @@ void DatabaseManager::processCombinedJson(const QString& uniqueId, const QByteAr
 
     QJsonObject root = doc.object();
 
-    // 1. Получаем ID устройства и его человеческое имя для отчетов
     int deviceId = getOrCreateDevice(uniqueId);
     QString deviceName = "Неизвестное устройство";
 
@@ -182,7 +172,6 @@ void DatabaseManager::processCombinedJson(const QString& uniqueId, const QByteAr
         deviceName = qDev.value(0).toString();
     }
 
-    // 2. Обрабатываем каждый датчик в JSON[cite: 1]
     for (auto it = root.begin(); it != root.end(); ++it) {
         QString sensorKey = it.key();
         double newValue = 0.0;
@@ -199,12 +188,8 @@ void DatabaseManager::processCombinedJson(const QString& uniqueId, const QByteAr
             newValue = it.value().toDouble();
         }
 
-        // Получаем ID датчика (и обновляем unit, если пришел новый)[cite: 1]
         int sensorId = getOrCreateSensor(deviceId, sensorKey, unit);
 
-        // --- БЛОК АНАЛИТИКИ ---
-
-        // Запрашиваем пороги и последние данные одним запросом
         QSqlQuery qThreshold(m_db);
         qThreshold.prepare(
             "SELECT s.min_limit, s.max_limit, s.max_rate, "
@@ -221,7 +206,6 @@ void DatabaseManager::processCombinedJson(const QString& uniqueId, const QByteAr
             QVariant prevValueVar = qThreshold.value(3);
             QVariant prevTimestampVar = qThreshold.value(4);
 
-            // А) Проверка абсолютных границ
             if (!minLimit.isNull() && newValue < minLimit.toDouble()) {
                 saveAlert(sensorId, "MIN_LIMIT", newValue);
                 emit anomalyDetected(uniqueId, deviceName, sensorKey, newValue, "MIN_LIMIT");
@@ -231,8 +215,6 @@ void DatabaseManager::processCombinedJson(const QString& uniqueId, const QByteAr
                 emit anomalyDetected(uniqueId, deviceName, sensorKey, newValue, "MAX_LIMIT");
             }
 
-            // Б) Анализ скорости изменения
-            // Формула: $$Rate = \frac{|V_{new} - V_{old}|}{\Delta t}$$
             if (!maxRate.isNull() && !prevValueVar.isNull() && !prevTimestampVar.isNull()) {
                 double prevValue = prevValueVar.toDouble();
                 QDateTime prevTime = prevTimestampVar.toDateTime();
@@ -250,13 +232,10 @@ void DatabaseManager::processCombinedJson(const QString& uniqueId, const QByteAr
             double predictedValue = predictFutureValue(sensorId, 300, 10);
 
             if (!std::isnan(predictedValue)) {
-                // Проверяем прогноз на превышение верхнего порога
-                // Условие: сейчас значение В НОРМЕ, но прогноз показывает АВАРИЮ
                 if (!maxLimit.isNull() && newValue <= maxLimit.toDouble() && predictedValue > maxLimit.toDouble()) {
                     saveAlert(sensorId, "PREDICT_MAX", predictedValue);
                     emit anomalyDetected(uniqueId, deviceName, sensorKey, predictedValue, "PREDICT_MAX");
                 }
-                // Проверяем прогноз на пробитие нижнего порога
                 else if (!minLimit.isNull() && newValue >= minLimit.toDouble() && predictedValue < minLimit.toDouble()) {
                     saveAlert(sensorId, "PREDICT_MIN", predictedValue);
                     emit anomalyDetected(uniqueId, deviceName, sensorKey, predictedValue, "PREDICT_MIN");
@@ -264,7 +243,6 @@ void DatabaseManager::processCombinedJson(const QString& uniqueId, const QByteAr
             }
         }
 
-        // 3. Сохраняем новое значение в историю[cite: 1]
         QSqlQuery qInsert(m_db);
         qInsert.prepare("INSERT INTO sensor_data (sensor_id, value) VALUES (?, ?)");
         qInsert.addBindValue(sensorId);
@@ -282,7 +260,7 @@ bool DatabaseManager::isDeviceOnline(int deviceId, int timeoutSeconds) {
 
     if (q.exec() && q.next()) {
         QDateTime lastSeen = q.value(0).toDateTime();
-        lastSeen.setTimeZone(QTimeZone::LocalTime); // Учитываем, что храним локально
+        lastSeen.setTimeZone(QTimeZone::LocalTime); 
         return lastSeen.secsTo(QDateTime::currentDateTime()) < timeoutSeconds;
     }
     return false;
@@ -292,14 +270,17 @@ QList<DeviceInfo> DatabaseManager::getAllDevices() {
     QList<DeviceInfo> list;
     if (!m_db.isOpen()) return list;
 
-    QSqlQuery q("SELECT id, name, room_id, unique_id FROM devices", m_db);
+    // Добавляем pos_x и pos_y в запрос
+    QSqlQuery q("SELECT id, name, room_id, unique_id, pos_x, pos_y FROM devices", m_db);
 
     while (q.next()) {
         DeviceInfo dev;
         dev.id = q.value(0).toInt();
         dev.name = q.value(1).toString();
-        dev.roomId = q.value(2).toInt(); // room_id может быть NULL, тогда вернет 0
+        dev.roomId = q.value(2).toInt();
         dev.uniqueId = q.value(3).toString();
+        dev.posX = q.value(4).toDouble(); // Читаем X
+        dev.posY = q.value(5).toDouble(); // Читаем Y
         list.append(dev);
     }
     return list;
@@ -314,7 +295,6 @@ SensorInfo DatabaseManager::getSensorSettings(int sensorId) {
     q.addBindValue(sensorId);
 
     if (q.exec() && q.next()) {
-        // Если в БД NULL, QVariant::toDouble() вернет 0.0, поэтому используем qQNaN() для индикации пустоты
         info.minLimit = q.value(0).isNull() ? qQNaN() : q.value(0).toDouble();
         info.maxLimit = q.value(1).isNull() ? qQNaN() : q.value(1).toDouble();
         info.maxRate = q.value(2).isNull() ? qQNaN() : q.value(2).toDouble();
@@ -326,7 +306,6 @@ SensorInfo DatabaseManager::getSensorSettings(int sensorId) {
 
 bool DatabaseManager::updateSensorThresholds(int sensorId, const QVariant& minLimit, const QVariant& maxLimit, const QVariant& maxRate) {
     QSqlQuery q(m_db);
-    // Обновляем пороги в таблице sensors
     q.prepare("UPDATE sensors SET min_limit = ?, max_limit = ?, max_rate = ? WHERE id = ?");
     q.addBindValue(minLimit);
     q.addBindValue(maxLimit);
@@ -334,7 +313,6 @@ bool DatabaseManager::updateSensorThresholds(int sensorId, const QVariant& minLi
     q.addBindValue(sensorId);
 
     if (q.exec()) {
-        // Излучаем сигнал, чтобы графики узнали об обновлении
         emit sensorThresholdsChanged(sensorId, minLimit.toDouble(), maxLimit.toDouble());
         return true;
     }
@@ -361,7 +339,6 @@ QString DatabaseManager::getDeviceNameByMac(const QString& mac) {
 QList<AlertRecord> DatabaseManager::getAlertHistory(int limit) {
     QList<AlertRecord> list;
     QSqlQuery q(m_db);
-    // Сложный запрос, чтобы собрать имена устройств и единицы измерения датчиков
     QString query = R"(
         SELECT d.name, s.sensor_key, a.alert_type, a.value, s.unit, a.timestamp 
         FROM alerts a
@@ -390,7 +367,6 @@ QList<AlertRecord> DatabaseManager::getAlertHistory(int limit) {
 
 double DatabaseManager::predictFutureValue(int sensorId, int futureSeconds, int pointsCount) {
     QSqlQuery q(m_db);
-    // Берем последние N точек
     q.prepare("SELECT value, UNIX_TIMESTAMP(timestamp) FROM sensor_data "
         "WHERE sensor_id = ? ORDER BY timestamp DESC LIMIT ?");
     q.addBindValue(sensorId);
@@ -403,12 +379,11 @@ double DatabaseManager::predictFutureValue(int sensorId, int futureSeconds, int 
         data.prepend(QPointF(q.value(1).toDouble(), q.value(0).toDouble()));
     }
 
-    if (data.size() < 3) return qQNaN(); // Слишком мало данных для тренда
+    if (data.size() < 3) return qQNaN();
 
     int n = data.size();
     double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
 
-    // Нормализуем X (время), вычитая первую метку, чтобы избежать переполнения float при умножении огромных timestamp
     double startX = data.first().x();
 
     for (int i = 0; i < n; ++i) {
@@ -452,4 +427,13 @@ QList<MeasurementEntry> DatabaseManager::getAllMeasurementsHistory(int limit) {
         }
     }
     return list;
+}
+
+void DatabaseManager::updateDevicePosition(int id, double x, double y) {
+    QSqlQuery query;
+    query.prepare("UPDATE devices SET pos_x = :x, pos_y = :y WHERE id = :id");
+    query.bindValue(":x", x);
+    query.bindValue(":y", y);
+    query.bindValue(":id", id);
+    query.exec();
 }

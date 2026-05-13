@@ -30,7 +30,6 @@ private:
     QDateTime m_lastTimestamp;
     QDateTime m_start;
     QDateTime m_end;
-    // UI controls for time interval selection
     QDateTimeEdit* m_startEdit;
     QDateTimeEdit* m_endEdit;
     QPushButton* m_applyBtn;

@@ -10,16 +10,14 @@ MqttServerService::MqttServerService(QObject* parent) : QObject(parent) {
     QObject::connect(&DatabaseManager::instance(), &DatabaseManager::anomalyDetected,
         [this](const QString& uid, const QString& devName, const QString& key, double val, const QString& type) {
 
-            // Формируем топик вида: devices/A1B2C3D4E5/alerts
             QString alertTopic = QString("devices/%1/alerts").arg(uid);
 
             QJsonObject root;
             root["sensor"] = key;
-            root["device_name"] = devName; // Для отображения в логе
+            root["device_name"] = devName; 
             root["type"] = type;
             root["value"] = val;
 
-            // Публикуем через наш сервис
             publishAlert(alertTopic, QJsonDocument(root).toJson());
         });
 }
@@ -44,7 +42,7 @@ void MqttServerService::onMessageReceived(const QByteArray& message, const QMqtt
     QStringList parts = topicName.split('/');
 
     if (parts.size() >= 2) {
-        QString macAddress = parts.at(1); // Извлекаем именно MAC-адрес
+        QString macAddress = parts.at(1); 
 
         if (!DatabaseManager::instance().open()) return;
 

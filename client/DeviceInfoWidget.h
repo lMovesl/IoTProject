@@ -13,6 +13,7 @@
 #include <QMainWindow>
 #include <QDockWidget>
 #include <QProgressBar>
+#include "FloorPlanWidget.h"
 
 struct SensorStatRow {
     QWidget* container = nullptr;
@@ -33,12 +34,13 @@ public:
     void setDevice(int deviceId, const QString& name);
     void updateData();
     int getCurrentIDDevice() const;
+    void loadFloorPlan(const QString& path) { m_floorPlan->loadFloorPlan(path); }
+    FloorPlanWidget* getFloorPlan();
+    void loadDevicesToMap();
 public slots:
     void onIntervalChanged(int index);
 
 private:
-  
-
     void setupUI();
     void createSensorChart(int sensorId, const QString& name, const QString& unit);
     void updateSensorChartData(int sensorId);
@@ -60,12 +62,11 @@ private:
     QVBoxLayout* m_chartsLayout;
 
     QComboBox* m_intervalCombo;
-
-    QMainWindow* m_dashboard;             // Внутренний контейнер для перемещаемых виджетов
-    QDockWidget* m_timelineDock;          // Блок с таймлайном
+    FloorPlanWidget* m_floorPlan;
+    QMainWindow* m_dashboard;             
+    QDockWidget* m_timelineDock;          
     QDockWidget* m_tableDock;
     QMap<int, QDockWidget*> m_chartDocks;
-    // Теперь храним просто указатель на наш виджет
     QMap<int, SensorChart*> m_sensorCharts;
 
     UptimeTimelineWidget* m_timelineWidget;

@@ -5,11 +5,10 @@
 #include <QVector>
 #include <QDateTime>
 
-// Структура для описания одного интервала состояния
 struct DeviceStateInterval {
-    qint64 startTimestamp; // Unix time в секундах
-    qint64 endTimestamp;   // Unix time в секундах
-    bool isOnline;         // true - зеленый, false - красный
+    qint64 startTimestamp;
+    qint64 endTimestamp;   
+    bool isOnline;        
 };
 
 class UptimeTimelineWidget : public QWidget {
@@ -17,7 +16,6 @@ class UptimeTimelineWidget : public QWidget {
 public:
     explicit UptimeTimelineWidget(QWidget* parent = nullptr);
 
-    // Установка данных для отрисовки
     void setData(const QVector<DeviceStateInterval>& data, qint64 rangeStart, qint64 rangeEnd);
     void setDeviceName(const QString& name);
 

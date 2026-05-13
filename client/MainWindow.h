@@ -29,8 +29,9 @@ private slots:
     void handleMqttMessage(const QString& topic, const QByteArray& payload);
     void openGraphWindow(int sensorId, const QString& sensorName);
     void onTreeItemClicked(const QModelIndex& index);
+    void onSelectFloorPlan();
+    void updateAllVisualStatuses();
 private:
-    // Элементы интерфейса
     QTreeView* m_treeView;
     QDockWidget* m_dock;
 
@@ -41,13 +42,10 @@ private:
 
     QListWidget* m_alertLog;
 
-    // Mapping deviceId -> MQTT topic
     QMap<int, QString> m_deviceTopics;
-    // Mapping sensorId -> open graph window (to update live)
     QMap<int, class SensorGraphWindow*> m_openGraphs;
 
-    void setupLayout(); // Метод для ручной сборки интерфейса
-    void onDeviceDoubleClicked(const QModelIndex& index);
+    void setupLayout(); 
     void subscribeToDevice(int deviceId);
     void subscribeToAllDevices();
 };

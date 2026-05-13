@@ -12,13 +12,13 @@ DEVICES = [
         "id": "A1B2C3D4E5", 
         "name": "Kitchen Sensor",
         "state": {"temp": 22.0, "hum": 45.0, "batt": 95.0},
-        "limits": {"temp": (18.0, 28.0), "hum": (30.0, 60.0), "step_temp": 0.2, "step_hum": 0.5}
+        "limits": {"temp": (18.0, 28.0), "hum": (30.0, 60.0), "step_temp": 0.4, "step_hum": 0.5}
     },
     {
         "id": "F6G7H8I9J0", 
         "name": "Bedroom Sensor",
         "state": {"temp": 21.0, "hum": 40.0, "batt": 88.0},
-        "limits": {"temp": (19.0, 25.0), "hum": (35.0, 55.0), "step_temp": 0.1, "step_hum": 0.3}
+        "limits": {"temp": (19.0, 25.0), "hum": (35.0, 55.0), "step_temp": 0.4, "step_hum": 0.3}
     }
 ]
 

@@ -14,6 +14,9 @@
 #include "AlertHistoryWindow.h"
 #include "MeasurementHistoryWindow.h"
 
+#include <QFileDialog>
+#include <QSettings>
+
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       m_model(new DeviceTreeModel(this)),
@@ -37,7 +40,6 @@ MainWindow::MainWindow(QWidget* parent)
             });
     m_mqttClient->connectToHost();
 
-    // 3. Сборка интерфейса вручную
     setupLayout();
     QMenuBar* menubar = new QMenuBar(this);
     QMenu* menu = new QMenu("Мониторинг", menubar);
@@ -53,14 +55,50 @@ MainWindow::MainWindow(QWidget* parent)
         historyWin.exec();
         });
 
+    QMenu* viewMenu = new QMenu("Вид", menubar);
+    QAction* loadPlanAction = viewMenu->addAction("Загрузить планировку...");
+    loadPlanAction->setShortcut(QKeySequence("Ctrl+O"));
+
+    connect(loadPlanAction, &QAction::triggered, this, &MainWindow::onSelectFloorPlan);
+    connect(m_deviceInfoWidget->getFloorPlan(), &FloorPlanWidget::deviceSelected,
+        this, [this](int id, const QString& name) {
+            m_deviceInfoWidget->setDevice(id, name);
+            m_deviceInfoWidget->updateData();
+        });
+
     setMenuBar(menubar);
     menubar->addMenu(menu);
+    menubar->addMenu(viewMenu);
     menu->addAction(measurmentsHistoryAction);
     menu->addAction(alertsHistoryAction);
 
     m_model->refreshStructure();
     subscribeToAllDevices();
     m_treeView->expandToDepth(0);
+
+    m_treeView->setDragEnabled(true);
+    m_treeView->setAcceptDrops(false); // Дерево только отдает
+    m_treeView->setDragDropMode(QAbstractItemView::DragOnly);
+
+    QSettings settings("MyCompany", "IoTSystem");
+    QString savedPath = settings.value("floorPlanPath").toString();
+    if (!savedPath.isEmpty()) {
+        m_deviceInfoWidget->loadFloorPlan(savedPath);
+        m_deviceInfoWidget->loadDevicesToMap();
+    }
+}
+
+void MainWindow::updateAllVisualStatuses() {
+    // Обновляем дерево (вызываем существующий метод модели)
+    m_model->updateDeviceStatuses();
+
+    // Обновляем карту
+    QList<DeviceInfo> devices = DatabaseManager::instance().getAllDevices();
+    for (const auto& dev : devices) {
+        bool isOnline = DatabaseManager::instance().isDeviceOnline(dev.id);
+        // Если онлайн -> alert = false (зеленый), если оффлайн -> alert = true (красный)
+        m_deviceInfoWidget->getFloorPlan()->setDeviceAlert(dev.id, !isOnline);
+    }
 }
 
 MainWindow::~MainWindow()
@@ -70,25 +108,20 @@ MainWindow::~MainWindow()
         m_mqttClient->disconnectFromHost();
         m_mqttClient->deleteLater();
     }
-    // Все дочерние объекты Qt удалятся автоматически
 }
 
 void MainWindow::setupLayout()
 {
     m_alertLog = new QListWidget(this);
-    //background-color: #2b2b2b;
     m_alertLog->setStyleSheet("QListWidget { color: #ffffff; font-family: Consolas; }");
 
-    // Central widget shows device information
     m_deviceInfoWidget = new DeviceInfoWidget(this);
     setCentralWidget(m_deviceInfoWidget);
 
-    // Tree view will be placed in a dock widget
     m_treeView = new QTreeView(this);
     m_treeView->setModel(m_model);
     m_treeView->header()->setSectionResizeMode(QHeaderView::Stretch);
 
-    // Container widget for the dock
     QWidget* dockContainer = new QWidget(this);
     QVBoxLayout* dockLayout = new QVBoxLayout(dockContainer);
     dockLayout->addWidget(m_treeView);
@@ -105,17 +138,15 @@ void MainWindow::setupLayout()
     addDockWidget(Qt::LeftDockWidgetArea, m_dock);
     addDockWidget(Qt::BottomDockWidgetArea, logDock);
 
-    // Connections
     connect(m_treeView, &QTreeView::clicked, this, &MainWindow::onTreeItemClicked);
-   // connect(m_treeView, &QTreeView::doubleClicked, this, &MainWindow::onTreeItemDoubleClicked);
     m_treeView->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_treeView, &QTreeView::customContextMenuRequested, this,
             &MainWindow::showContextMenu);
 
-    // 4. Настройка таймера (обновление из БД как запасной вариант)
     connect(m_refreshTimer, &QTimer::timeout, m_deviceInfoWidget, &DeviceInfoWidget::updateData);
     connect(m_refreshTimer, &QTimer::timeout, m_model, &DeviceTreeModel::syncDevicesFromDb);
     connect(m_refreshTimer, &QTimer::timeout, m_model, &DeviceTreeModel::updateDeviceStatuses);
+    connect(m_refreshTimer, &QTimer::timeout, this, &MainWindow::updateAllVisualStatuses);
     m_refreshTimer->start(5000);
 
     setWindowTitle("IOT");
@@ -124,12 +155,11 @@ void MainWindow::setupLayout()
 
 void MainWindow::onTreeItemClicked(const QModelIndex& index) {
     auto* item = m_model->itemFromIndex(index);
-    if (!item || !item->parent()) return; // Пропускаем корень и комнаты
+    if (!item || !item->parent()) return;
 
     QStandardItem* deviceItem = nullptr;
     int deviceId = -1;
 
-    // Проверяем: нажат датчик (у него есть дедушка) или устройство (у него есть только отец-комната)
     if (item->parent()->parent() == nullptr)
         deviceItem = item;
     else
@@ -138,7 +168,6 @@ void MainWindow::onTreeItemClicked(const QModelIndex& index) {
 	deviceId = deviceItem->data(Qt::UserRole).toInt();
 
     if (deviceId != -1 && deviceItem != nullptr && deviceId != m_deviceInfoWidget->getCurrentIDDevice()) {
-        // Отображаем устройство в центральном виджете
         m_deviceInfoWidget->setDevice(deviceId, deviceItem->text());
         m_deviceInfoWidget->updateData();
     }
@@ -152,24 +181,43 @@ void MainWindow::showContextMenu(const QPoint& pos)
     QMenu menu(this);
 
     bool isRoom = !index.parent().isValid();
-
+    // Устройство — это второй уровень вложенности
     bool isDevice = index.data(Qt::UserRole).isValid()
-                    && !index.parent().parent().isValid();
+        && index.parent().isValid()
+        && !index.parent().parent().isValid();
+    // Датчик — это третий уровень вложенности
     bool isSensor = index.parent().isValid()
-                    && index.parent().parent().isValid();
+        && index.parent().parent().isValid();
 
-    if (isRoom)
+    if (isRoom) {
         return;
+    }
     else if (isDevice) {
         int deviceId = index.data(Qt::UserRole).toInt();
+
+        // --- НОВАЯ ЛОГИКА: Поиск на карте ---
+        QAction* findAction = menu.addAction("Показать на планировке");
+
+        // Проверяем, добавлено ли устройство на карту
+        bool onMap = m_deviceInfoWidget->getFloorPlan()->hasDevice(deviceId);
+        findAction->setEnabled(onMap); // Если нет на сцене - кнопка неактивна
+
+        if (onMap) {
+            connect(findAction, &QAction::triggered, [this, deviceId]() {
+                m_deviceInfoWidget->getFloorPlan()->centerOnDevice(deviceId);
+                });
+        }
+        menu.addSeparator();
+        // ------------------------------------
+
         QAction* configAction = menu.addAction("Настроить устройство");
         connect(configAction, &QAction::triggered, [this, deviceId]() {
             ConfigureDeviceDialog dialog(deviceId, this);
             if (dialog.exec() == QDialog::Accepted) {
                 m_model->refreshStructure();
-                subscribeToAllDevices();
+                subscribeToAllDevices(); // убедитесь, что метод доступен
             }
-        });
+            });
     }
     else if (isSensor) {
         int sensorId = index.data(Qt::UserRole + 1).toInt();
@@ -179,21 +227,18 @@ void MainWindow::showContextMenu(const QPoint& pos)
         connect(graphAction, &QAction::triggered, [this, sensorId, sensorName]() {
             SensorGraphWindow* graph = new SensorGraphWindow(sensorId, sensorName);
             graph->setAttribute(Qt::WA_DeleteOnClose);
-            // Сохраняем ссылку для живых обновлений
             m_openGraphs[sensorId] = graph;
-            // При удалении окна убираем ссылку
             connect(graph, &QObject::destroyed, this, [this, sensorId]() {
                 m_openGraphs.remove(sensorId);
-            });
+                });
             graph->show();
-        });
+            });
 
         QAction* alertAction = menu.addAction("Установить пороговые значения");
         connect(alertAction, &QAction::triggered, [this, sensorId]() {
             if (sensorId > 0) {
                 SensorConfigDialog dialog(sensorId, this);
                 if (dialog.exec() == QDialog::Accepted) {
-                    // Можно обновить статус-бар или дерево, если настройки изменились
                     m_alertLog->insertItem(0, "Настройки датчика обновлены");
                 }
             }
@@ -201,11 +246,6 @@ void MainWindow::showContextMenu(const QPoint& pos)
     }
 
     menu.exec(m_treeView->viewport()->mapToGlobal(pos));
-}
-
-void MainWindow::onDeviceDoubleClicked(const QModelIndex& index)
-{
-   
 }
 
 void MainWindow::subscribeToDevice(int deviceId)
@@ -220,7 +260,6 @@ void MainWindow::subscribeToDevice(int deviceId)
 
 void MainWindow::subscribeToAllDevices()
 {
-    // Отписываемся от всех старых топиков (просто очистим карту и создадим новые подписки)
     QMapIterator<int, QString> it(m_deviceTopics);
     while (it.hasNext()) {
         it.next();
@@ -229,14 +268,12 @@ void MainWindow::subscribeToAllDevices()
     m_deviceTopics.clear();
 
     if (!DatabaseManager::instance().open()) return;
-    QList<DeviceInfo> devices = DatabaseManager::instance().getDevicesByRoom(0); // комната 0 - нераспределенные
-    // Также нужно получить устройства из всех комнат
+    QList<DeviceInfo> devices = DatabaseManager::instance().getDevicesByRoom(0); 
     QList<RoomInfo> rooms = DatabaseManager::instance().getRooms();
     for (const RoomInfo& room : rooms) {
         QList<DeviceInfo> devs = DatabaseManager::instance().getDevicesByRoom(room.id);
         devices.append(devs);
     }
-    // Убираем дубликаты (по id)
     QSet<int> seen;
     for (const DeviceInfo& dev : devices) {
         if (!seen.contains(dev.id)) {
@@ -248,18 +285,15 @@ void MainWindow::subscribeToAllDevices()
 
 void MainWindow::handleMqttMessage(const QString& topic, const QByteArray& payload)
 {
-    // 1. Проверка структуры топика (devices/<MAC>/<type>)
     QStringList parts = topic.split('/');
     if (parts.size() < 3) {
         qDebug() << "Unexpected topic format:" << topic;
         return;
     }
 
-    // Извлекаем строковый идентификатор (например, MAC-адрес)
     QString deviceMac = parts[1];
-    QString messageType = parts[2]; // 'data' или 'alerts'
+    QString messageType = parts[2]; 
 
-    // 2. Валидация JSON
     QJsonDocument doc = QJsonDocument::fromJson(payload);
     if (doc.isNull() || !doc.isObject()) {
         qDebug() << "Invalid JSON payload from topic:" << topic;
@@ -267,19 +301,14 @@ void MainWindow::handleMqttMessage(const QString& topic, const QByteArray& paylo
     }
     QJsonObject obj = doc.object();
 
-    // 3. Получение или создание ID устройства в базе по его MAC-адресу
-    // Теперь передаем deviceMac вместо всего топика
     int deviceId = DatabaseManager::instance().getOrCreateDevice(deviceMac);
 
-    // Подписываемся, если это новое устройство
     subscribeToDevice(deviceId);
 
-    // 4. Обработка в зависимости от типа сообщения
     if (messageType == "alerts") {
         return;
     }
 
-    // 5. Обработка данных (messageType == "data")
     QDateTime ts = QDateTime::currentDateTime();
 
     for (auto it = obj.begin(); it != obj.end(); ++it) {
@@ -298,14 +327,12 @@ void MainWindow::handleMqttMessage(const QString& topic, const QByteArray& paylo
             value = val.toDouble();
         }
 
-        // Сохранение и визуализация
         int sensorId = DatabaseManager::instance().getOrCreateSensor(deviceId, sensorKey, unit);
 
         if (m_openGraphs.contains(sensorId)) {
             auto* graph = m_openGraphs[sensorId];
             graph->appendPoint(value, ts);
 
-            // Логика прогнозирования
             double predicted = DatabaseManager::instance().predictFutureValue(sensorId, 300, 10);
             if (!std::isnan(predicted)) {
                 graph->getChart()->updatePrediction(ts, value, 300, predicted);
@@ -319,7 +346,6 @@ void MainWindow::handleMqttMessage(const QString& topic, const QByteArray& paylo
 
 void MainWindow::openGraphWindow(int sensorId, const QString& sensorName)
 {
-    // Этот метод сейчас не используется напрямую, оставляем для расширения
     SensorGraphWindow* graph = new SensorGraphWindow(sensorId, sensorName);
     graph->setAttribute(Qt::WA_DeleteOnClose);
     m_openGraphs[sensorId] = graph;
@@ -329,7 +355,6 @@ void MainWindow::openGraphWindow(int sensorId, const QString& sensorName)
 }
 
 void MainWindow::handleAlertMessage(const QByteArray& message, const QMqttTopicName& topic) {
-    // Проверяем, что это действительно топик алерта
     QStringList parts = topic.name().split('/');
     if (parts.size() == 3 && parts.last() == "alerts") {
         QString deviceMac = parts.at(1); // Достаем MAC-адрес из середины топика
@@ -342,7 +367,6 @@ void MainWindow::handleAlertMessage(const QByteArray& message, const QMqttTopicN
         QString type = obj["type"].toString();
         double val = obj["value"].toDouble();
 
-        // Формируем запись для твоего m_alertLog (созданного кодом)
         QString logMsg = QString("[%1] Имя: %2 -> %3: %4 (Знач: %5)")
             .arg(QTime::currentTime().toString("HH:mm:ss"))
             .arg(devName)
@@ -356,3 +380,18 @@ void MainWindow::handleAlertMessage(const QByteArray& message, const QMqttTopicN
     }
 }
 
+
+
+void MainWindow::onSelectFloorPlan() {
+    QString fileName = QFileDialog::getOpenFileName(this,
+        "Выберите изображение планировки",
+        "",
+        "Изображения (*.png *.jpg *.jpeg *.bmp);;Все файлы (*.*)");
+
+    if (!fileName.isEmpty()) {
+        m_deviceInfoWidget->loadFloorPlan(fileName);
+
+        QSettings settings("MyCompany", "IoTSystem");
+        settings.setValue("floorPlanPath", fileName);
+    }
+}

@@ -22,11 +22,9 @@ public:
         mainLayout->setContentsMargins(8, 8, 8, 8);
         mainLayout->setSpacing(6);
 
-        // Это заставит диалог ВСЕГДА принимать минимально возможный размер под добавленные элементы
         mainLayout->setSizeConstraint(QLayout::SetFixedSize);
 
         if (m_type == FilterType::List) {
-            // --- Создаем только Список ---
             m_listWidget = new QListWidget(this);
             for (const QString& val : uniqueValues) {
                 auto* item = new QListWidgetItem(val, m_listWidget);
@@ -34,13 +32,12 @@ public:
                 item->setCheckState(current.allowedValues.isEmpty() || current.allowedValues.contains(val) ? Qt::Checked : Qt::Unchecked);
             }
 
-            m_listWidget->setFixedHeight(200); // Жестко ограничиваем высоту скролла
-            m_listWidget->setFixedWidth(200);  // И ширину списка
+            m_listWidget->setFixedHeight(200);
+            m_listWidget->setFixedWidth(200);  
             mainLayout->addWidget(m_listWidget);
 
         }
         else if (m_type == FilterType::NumericRange) {
-            // --- Создаем только Числовой фильтр ---
             m_minSpin = new QDoubleSpinBox(this);
             m_maxSpin = new QDoubleSpinBox(this);
             m_minSpin->setRange(-999999.0, 999999.0);
@@ -55,7 +52,6 @@ public:
 
         }
         else if (m_type == FilterType::DateRange) {
-            // --- Создаем только Календари ---
             m_minDate = new QDateTimeEdit(this);
             m_maxDate = new QDateTimeEdit(this);
             m_minDate->setDisplayFormat("dd.MM.yyyy HH:mm:ss");
@@ -72,7 +68,6 @@ public:
             mainLayout->addWidget(m_maxDate);
         }
 
-        // Кнопки добавляем всегда
         auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
         mainLayout->addWidget(buttons);
 

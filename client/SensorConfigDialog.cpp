@@ -10,17 +10,14 @@ SensorConfigDialog::SensorConfigDialog(int sensorId, QWidget* parent)
     setWindowTitle("Настройка аналитики датчика");
     setMinimumWidth(300);
 
-    // Инициализация чекбоксов
     m_chkMin = new QCheckBox("Нижний порог:");
     m_chkMax = new QCheckBox("Верхний порог:");
     m_chkRate = new QCheckBox("Макс. скачок/сек:");
 
-    // Инициализация спинбоксов
     m_spinMin = new QDoubleSpinBox();
     m_spinMax = new QDoubleSpinBox();
     m_spinRate = new QDoubleSpinBox();
 
-    // Настройка диапазонов для спинбоксов (по умолчанию до 100, можно увеличить)
     m_spinMin->setRange(-10000, 10000);
     m_spinMax->setRange(-10000, 10000);
     m_spinRate->setRange(0, 10000);
@@ -29,18 +26,15 @@ SensorConfigDialog::SensorConfigDialog(int sensorId, QWidget* parent)
     m_spinMax->setEnabled(false);
     m_spinRate->setEnabled(false);
 
-    // Связываем чекбоксы с доступностью спинбоксов
     connect(m_chkMin, &QCheckBox::toggled, this, &SensorConfigDialog::toggleSpinBoxes);
     connect(m_chkMax, &QCheckBox::toggled, this, &SensorConfigDialog::toggleSpinBoxes);
     connect(m_chkRate, &QCheckBox::toggled, this, &SensorConfigDialog::toggleSpinBoxes);
 
-    // Кнопки
     m_btnSave = new QPushButton("Сохранить");
     m_btnCancel = new QPushButton("Отмена");
     connect(m_btnSave, &QPushButton::clicked, this, &SensorConfigDialog::saveAndClose);
     connect(m_btnCancel, &QPushButton::clicked, this, &QDialog::reject);
 
-    // --- Сборка интерфейса (Сетка) ---
     QGridLayout* gridLayout = new QGridLayout();
     gridLayout->addWidget(m_chkMin, 0, 0);
     gridLayout->addWidget(m_spinMin, 0, 1);
@@ -92,7 +86,6 @@ void SensorConfigDialog::saveAndClose() {
     QVariant maxLimit = m_chkMax->isChecked() ? m_spinMax->value() : QVariant();
     QVariant maxRate = m_chkRate->isChecked() ? m_spinRate->value() : QVariant();
 
-    // Сохранение в БД (используя метод, описанный в предыдущем сообщении)
     DatabaseManager::instance().updateSensorThresholds(m_sensorId, minLimit, maxLimit, maxRate); //[cite: 15, 16]
 
     accept();

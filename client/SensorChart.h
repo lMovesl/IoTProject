@@ -28,7 +28,7 @@ protected:
     bool event(QEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
-    void mouseMoveEvent(QMouseEvent* event) override; // <--- Добавить это
+    void mouseMoveEvent(QMouseEvent* event) override;
     void leaveEvent(QEvent* event) override;
 private:
     QChart* m_chart;
@@ -39,14 +39,14 @@ private:
     QDateTimeAxis* m_axisX;
     QValueAxis* m_axisY;
 
-    QLineSeries* m_cursorLine; // Линия, следующая за мышью
-    QPointF m_currentTooltipPoint; // Для отслеживания точки, которая уже показана
+    QLineSeries* m_cursorLine;
+    QPointF m_currentTooltipPoint; 
 
     int m_sensorId;
 
-    QString m_unit;               // Единица измерения
-    double m_minLimit = 0.0;      // Нижний предел
-    double m_maxLimit = 0.0;      // Верхний предел
+    QString m_unit;              
+    double m_minLimit = 0.0;    
+    double m_maxLimit = 0.0;     
     bool m_hasPrediction = false; // Есть ли актуальный прогноз
     double m_predictedValue = 0.0;// Значение прогноза
     QDateTime m_predictionTime;
@@ -56,7 +56,7 @@ private:
     QDateTime m_baseXStart;
     QDateTime m_baseXEnd;
 
-    bool m_isMouseOver = false; // Флаг: находится ли мышь над линией
+    bool m_isMouseOver = false; 
     QPointF m_lastHoverPoint;
     void showTooltip(const QPointF& point);
 

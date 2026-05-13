@@ -9,17 +9,15 @@ SensorChart::SensorChart(const QString& title, int sensorId, QWidget* parent) : 
     m_chart->setTitle(title);
     m_chart->legend()->setAlignment(Qt::AlignBottom);
 
-    // 1. Настройка основной линии (Жирная, ярко-зеленая)
     m_series = new QLineSeries();
     m_series->setName("Значение");
-    QPen mainPen(QColor("#2ecc71")); // Ваш зеленый цвет
-    mainPen.setWidth(2);             // Толщина линии (2 или 3 оптимально)
+    QPen mainPen(QColor("#2ecc71")); //зелный
+    mainPen.setWidth(2);             
     mainPen.setCapStyle(Qt::RoundCap);
     mainPen.setJoinStyle(Qt::RoundJoin);
     m_series->setPen(mainPen);
-    m_series->setPointsVisible(false); // Точки на графике
+    m_series->setPointsVisible(false); 
 
-    // 2. Пороги (Пунктирные линии)
     m_minLine = new QLineSeries();
     m_minLine->setName("Мин. порог");
     QPen blueDash(QColor("#3498db"));
@@ -34,32 +32,28 @@ SensorChart::SensorChart(const QString& title, int sensorId, QWidget* parent) : 
     redDash.setWidth(2);
     m_maxLine->setPen(redDash);
 
-    // 3. Прогноз (Фиолетовый пунктир)
     m_predictSeries = new QLineSeries();
     m_predictSeries->setName("Прогноз");
-    QPen predictPen(QColor("#9b59b6"));
+    QPen predictPen(QColor("#9b59b6")); //фиолетовый
     predictPen.setWidth(3);
     predictPen.setStyle(Qt::DotLine);
     m_predictSeries->setPen(predictPen);
 
-    // Добавляем все серии в график
     m_chart->addSeries(m_series);
     m_chart->addSeries(m_minLine);
     m_chart->addSeries(m_maxLine);
     m_chart->addSeries(m_predictSeries);
 
-    // 4. Настройка осей (Сетка стала видимой)
     m_axisX = new QDateTimeAxis();
     m_axisX->setFormat("HH:mm:ss");
-    m_axisX->setTickCount(7);
-    m_axisX->setGridLineColor(QColor("#dcdde1")); // Светло-серая сетка
+    m_axisX->setTickCount(5);
+    m_axisX->setGridLineColor(QColor("#dcdde1")); // Светло-серый
     m_chart->addAxis(m_axisX, Qt::AlignBottom);
 
     m_axisY = new QValueAxis();
     m_axisY->setGridLineColor(QColor("#dcdde1"));
     m_chart->addAxis(m_axisY, Qt::AlignLeft);
 
-    // Привязка серий к осям (ОБЯЗАТЕЛЬНО ПОСЛЕ addAxis)
     m_series->attachAxis(m_axisX);
     m_series->attachAxis(m_axisY);
     m_minLine->attachAxis(m_axisX);
@@ -69,7 +63,6 @@ SensorChart::SensorChart(const QString& title, int sensorId, QWidget* parent) : 
     m_predictSeries->attachAxis(m_axisX);
     m_predictSeries->attachAxis(m_axisY);
 
-    // 5. Вертикальная линия курсора
     m_cursorLine = new QLineSeries();
     QPen cursorPen(QColor("#7f8c8d"));
     cursorPen.setWidth(1);
@@ -79,14 +72,13 @@ SensorChart::SensorChart(const QString& title, int sensorId, QWidget* parent) : 
     m_cursorLine->attachAxis(m_axisX);
     m_cursorLine->attachAxis(m_axisY);
 
-    // Скрываем курсор из легенды
     auto markers = m_chart->legend()->markers(m_cursorLine);
     if (!markers.isEmpty()) markers.at(0)->setVisible(false);
 
     setChart(m_chart);
-    setRenderHint(QPainter::Antialiasing); // Сглаживание
+    setRenderHint(QPainter::Antialiasing); 
     setMouseTracking(true);
-    setRubberBand(QChartView::RectangleRubberBand); // Зум рамкой
+    setRubberBand(QChartView::RectangleRubberBand); 
 
     if (m_sensorId != -1) {
         connect(&DatabaseManager::instance(), &DatabaseManager::sensorThresholdsChanged,
@@ -101,7 +93,7 @@ void SensorChart::setThresholds(double min, double max) {
     m_minLimit = min;
     m_maxLimit = max;
 
-    if (!std::isnan(min)) m_minLine->append(0, min); // Временные точки, обновятся в update
+    if (!std::isnan(min)) m_minLine->append(0, min);
     if (!std::isnan(max)) m_maxLine->append(0, max);
 
     updateThresholdPositions();
@@ -110,12 +102,9 @@ void SensorChart::setThresholds(double min, double max) {
 void SensorChart::addPoint(const QDateTime& time, double value) {
     m_series->append(time.toMSecsSinceEpoch(), value);
 
-    // Сдвигаем окно, только если новая точка реально вышла за ПРАВУЮ границу
     if (m_baseXEnd.isValid() && time > m_baseXEnd) {
-        // Вычисляем, насколько точка ушла вперед
         qint64 diffMSecs = m_baseXEnd.msecsTo(time);
 
-        // Сдвигаем обе границы на эту разницу, сохраняя ширину окна (интервал)
         m_baseXStart = m_baseXStart.addMSecs(diffMSecs);
         m_baseXEnd = m_baseXEnd.addMSecs(diffMSecs);
 
@@ -144,8 +133,6 @@ void SensorChart::setXAxisRange(const QDateTime& start, const QDateTime& end) {
     m_baseXStart = start;
     m_baseXEnd = end;
 
-    // Если пользователь сейчас в режиме зума, мы обновляем базовые границы в памяти,
-    // но не трогаем саму ось, чтобы не "выбивать" его из просмотра.
     if (m_isZoomed) return;
 
     m_axisX->setRange(start, end);
@@ -155,7 +142,6 @@ void SensorChart::setXAxisRange(const QDateTime& start, const QDateTime& end) {
 void SensorChart::setPoints(const QList<QPointF>& points) {
     m_series->replace(points);
 
-    // Автомасштаб по вертикали (Y)
     if (!m_isZoomed && !points.isEmpty()) {
         double minY = points.first().y();
         double maxY = points.first().y();
@@ -169,8 +155,6 @@ void SensorChart::setPoints(const QList<QPointF>& points) {
     }
 
     if (m_isMouseOver) {
-        // Ищем ближайшую точку в новых данных к m_lastHoverPoint
-        // или просто перерисовываем старый текст по текущей позиции курсора
         showTooltip(m_lastHoverPoint);
     }
 
@@ -224,19 +208,16 @@ void SensorChart::wheelEvent(QWheelEvent* event) {
         chart()->zoomOut();
     }
 
-    // Если мы вышли на исходный масштаб (zoomOut до упора), можно вернуть m_isZoomed = false,
-    // но обычно проще оставить сброс на правую кнопку.
     QChartView::wheelEvent(event);
 }
 
 void SensorChart::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::RightButton) {
-        resetZoom(); // Сброс масштаба
+        resetZoom();
         event->accept();
         return;
     }
 
-    // Если была нажата левая кнопка (начало выделения рамки)
     if (event->button() == Qt::LeftButton) {
         m_isZoomed = true;
     }
@@ -246,13 +227,10 @@ void SensorChart::mousePressEvent(QMouseEvent* event) {
 void SensorChart::resetZoom() {
     m_isZoomed = false;
 
-    // ВАЖНО: Убираем chart()->zoomReset()!
-    // Вместо этого принудительно ставим ось в границы, которые хранятся в памяти.
     if (m_baseXStart.isValid() && m_baseXEnd.isValid()) {
         m_axisX->setRange(m_baseXStart, m_baseXEnd);
     }
 
-    // Опционально: делаем автозахват по Y, чтобы график не был "сплюснутым"
     QList<QPointF> points = m_series->points();
     if (!points.isEmpty()) {
         double minY = points.first().y();
@@ -274,7 +252,6 @@ void SensorChart::setUnit(const QString& unit) {
 }
 
 void SensorChart::showTooltip(const QPointF& point) {
-    qDebug() << "show";
     QString dt = QDateTime::fromMSecsSinceEpoch(point.x()).toString("HH:mm:ss");
     QString text = QString("<b>Время:</b> %1<br>"
         "<b>Значение:</b> %2 %3<br>"
@@ -287,16 +264,15 @@ void SensorChart::showTooltip(const QPointF& point) {
             .arg(m_predictedValue, 0, 'f', 2).arg(m_unit);
     }
 
-    // Используем глобальные координаты с отступом
     QPoint pos = QCursor::pos();
     pos.setX(pos.x() + 15);
-    pos.setY(pos.y() - 15); // Чуть выше курсора, чтобы не перекрывать линию
+    pos.setY(pos.y() - 15);
 
     QToolTip::showText(pos, text, this, rect(), 5000);
 }
 
 void SensorChart::mouseMoveEvent(QMouseEvent* event) {
-    QChartView::mouseMoveEvent(event); // Важно для зума
+    QChartView::mouseMoveEvent(event); 
 
     if (!chart()->plotArea().contains(event->pos())) {
         m_cursorLine->setVisible(false);
@@ -337,12 +313,10 @@ bool SensorChart::event(QEvent* event) {
             return true;
         }
 
-        // 1. Точное преобразование координат
-        // Используем mapToValue именно для этой позиции
         QPointF valueAtMouse = chart()->mapToValue(helpEvent->pos(), m_series);
         double mouseX = valueAtMouse.x();
 
-        // 2. Поиск ближайшей точки
+        // Поиск ближайшей точки
         auto it = std::lower_bound(points.begin(), points.end(), QPointF(mouseX, 0),
             [](const QPointF& a, const QPointF& b) { return a.x() < b.x(); });
 
@@ -354,7 +328,6 @@ bool SensorChart::event(QEvent* event) {
             closestPoint = (qAbs((it - 1)->x() - mouseX) < qAbs(it->x() - mouseX)) ? *(it - 1) : *it;
         }
 
-        // 3. Формирование текста с "квадратиками" (цвета берем из серий)
         QString seriesColor = m_series->pen().color().name();
         QString minColor = m_minLine->pen().color().name();
         QString maxColor = m_maxLine->pen().color().name();
@@ -371,7 +344,6 @@ bool SensorChart::event(QEvent* event) {
             .arg(minColor).arg(m_minLimit)
             .arg(maxColor).arg(m_maxLimit);
 
-        // Добавляем прогноз, если он есть
         if (m_hasPrediction) {
             QString predColor = m_predictSeries->pen().color().name();
             text += QString("<br><span style='color:%1;'>■</span> <b>Прогноз (%2):</b> <font color='%1'>%3 %4</font>")

@@ -16,18 +16,15 @@ AlertHistoryWindow::AlertHistoryWindow(QWidget* parent) : QDialog(parent) {
 
     QVBoxLayout* layout = new QVBoxLayout(this);
 
-    // 1. Инициализация моделей
     m_sourceModel = new QStandardItemModel(this);
     m_sourceModel->setHorizontalHeaderLabels({ "Устройство", "Датчик", "Значение", "Ед. изм.", "Тип", "Время" });
 
     m_proxyModel = new MultiColumnFilterProxyModel(this);
     m_proxyModel->setSourceModel(m_sourceModel);
 
-    // 2. Настройка таблицы
     m_view = new QTableView(this);
     m_view->setModel(m_proxyModel);
 
-    // Установка кастомного заголовка для фильтров
     FilterHeader* header = new FilterHeader(Qt::Horizontal, m_view);
     m_view->setHorizontalHeader(header);
     m_view->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
@@ -50,7 +47,7 @@ AlertHistoryWindow::AlertHistoryWindow(QWidget* parent) : QDialog(parent) {
 }
 
 void AlertHistoryWindow::loadAlerts() {
-    auto history = DatabaseManager::instance().getAlertHistory(500); // Загрузим побольше для теста фильтров
+    auto history = DatabaseManager::instance().getAlertHistory(500); 
     m_sourceModel->setRowCount(0);
 
     for (const auto& entry : history) {
@@ -70,7 +67,7 @@ void AlertHistoryWindow::loadAlerts() {
         localTime.setTimeZone(QTimeZone(QTimeZone::LocalTime));
 
         QStandardItem* timeItem = new QStandardItem();
-        timeItem->setData(localTime, Qt::UserRole); // Для фильтра и сортировки как объект даты
+        timeItem->setData(localTime, Qt::UserRole);
         timeItem->setData(localTime.toString("yyyy-MM-dd HH:mm:ss"), Qt::DisplayRole);
         row << timeItem;
 
@@ -112,7 +109,6 @@ void AlertHistoryWindow::exportToCsv() {
     QFile file(fileName);
     if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         QTextStream out(&file);
-        // Записываем заголовок (BOM для корректного открытия в Excel)
         out.setGenerateByteOrderMark(true);
 
         QStringList headers;
@@ -121,11 +117,9 @@ void AlertHistoryWindow::exportToCsv() {
         }
         out << headers.join(";") << "\n";
 
-        // Записываем данные только из отфильтрованных строк
         for (int row = 0; row < m_proxyModel->rowCount(); ++row) {
             QStringList rowData;
             for (int col = 0; col < m_proxyModel->columnCount(); ++col) {
-                // Берем данные из прокси-модели
                 rowData << m_proxyModel->index(row, col).data(Qt::DisplayRole).toString();
             }
             out << rowData.join(";") << "\n";

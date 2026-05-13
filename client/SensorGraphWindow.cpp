@@ -17,12 +17,10 @@ SensorGraphWindow::SensorGraphWindow(int sensorId, const QString& sensorName, QW
     setWindowTitle("История показаний: " + sensorName);
     resize(800, 500);
 
-    // --- Time‑interval UI ----------------------------------------------------
     m_startEdit = new QDateTimeEdit(this);
     m_endEdit = new QDateTimeEdit(this);
     m_applyBtn = new QPushButton(tr("Применить"), this);
 
-    // Default interval: last 24 h
     QDateTime now = QDateTime::currentDateTime();
     m_endEdit->setDateTime(now);
     m_startEdit->setDateTime(now.addDays(-1));
@@ -40,21 +38,18 @@ SensorGraphWindow::SensorGraphWindow(int sensorId, const QString& sensorName, QW
 
     SensorInfo info = DatabaseManager::instance().getSensorSettings(m_sensorId);
     m_sensorChart = new SensorChart("История показаний", sensorId, this);
-    m_sensorChart->setUnit(info.unit); // Установка юнита
-    m_sensorChart->setThresholds(info.minLimit, info.maxLimit); //
-    // --- Main layout ----------------------------------------------------------
+    m_sensorChart->setUnit(info.unit);
+    m_sensorChart->setThresholds(info.minLimit, info.maxLimit);
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->addLayout(intervalLayout);
     mainLayout->addWidget(m_sensorChart);
 
-    // --- Timer for live updates --------------------------------------------
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &SensorGraphWindow::loadData);
     m_timer->start(2000);
 
     m_lastTimestamp.setTimeZone(QTimeZone::LocalTime);
 
-	//Load the default interval data
     applyInterval();
 }
 
@@ -78,29 +73,23 @@ void SensorGraphWindow::loadData() {
             QDateTime dt = q.value(1).toDateTime();
             dt.setTimeZone(QTimeZone::LocalTime);
 
-            // Собираем точки в список
             points.append(QPointF(dt.toMSecsSinceEpoch(), val));
             lastDt = dt;
         }
 
-        // Передаем данные в наш компонент[cite: 30, 31]
         m_sensorChart->setXAxisRange(m_start, m_end);
         m_sensorChart->setPoints(points);
 
-        // Работа с прогнозом (теперь m_series не нужен)
         if (!points.isEmpty()) {
             QDateTime lastTime = QDateTime::fromMSecsSinceEpoch(points.last().x());
             QDateTime currentTime = QDateTime::currentDateTime();
 
-            // ПОРОГ АКТУАЛЬНОСТИ: 60 секунд (можно настроить)
             int staleThresholdSeconds = 60;
 
             if (lastTime.secsTo(currentTime) > staleThresholdSeconds) {
-                // Данные слишком старые — удаляем прогноз с графика
                 m_sensorChart->clearPrediction(); 
             }
             else {
-                // Данные свежие — рассчитываем и рисуем прогноз
                 double predicted = DatabaseManager::instance().predictFutureValue(m_sensorId, 300, 10);
 
                 if (!std::isnan(predicted)) {
@@ -117,7 +106,6 @@ void SensorGraphWindow::loadData() {
     }
 }
 
-// Slot invoked when the user clicks the Apply button
 void SensorGraphWindow::applyInterval() {
     m_start = m_startEdit->dateTime();
     m_end = m_endEdit->dateTime();
@@ -132,10 +120,8 @@ SensorGraphWindow::~SensorGraphWindow() {
 }
 
 void SensorGraphWindow::appendPoint(double value, const QDateTime& time) {
-    // Просто вызываем метод нашего кастомного графика[cite: 30, 31]
     m_sensorChart->addPoint(time, value);
 
-    // По желанию: здесь же можно обновлять линию прогноза при каждом новом сообщении
     double predicted = DatabaseManager::instance().predictFutureValue(m_sensorId, 300, 10);
     if (!std::isnan(predicted)) {
         m_sensorChart->updatePrediction(time, value, 300, predicted);
