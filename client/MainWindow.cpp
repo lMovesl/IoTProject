@@ -89,16 +89,27 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 void MainWindow::updateAllVisualStatuses() {
-    // Обновляем дерево (вызываем существующий метод модели)
-    m_model->updateDeviceStatuses();
-
-    // Обновляем карту
+    // Получаем список всех устройств
     QList<DeviceInfo> devices = DatabaseManager::instance().getAllDevices();
+
     for (const auto& dev : devices) {
-        bool isOnline = DatabaseManager::instance().isDeviceOnline(dev.id);
-        // Если онлайн -> alert = false (зеленый), если оффлайн -> alert = true (красный)
-        m_deviceInfoWidget->getFloorPlan()->setDeviceAlert(dev.id, !isOnline);
+        int status = DatabaseManager::instance().getDeviceStatus(dev.id);
+
+        if (status == 1) {
+            // ONLINE -> Зеленый, не мигает
+            m_deviceInfoWidget->getFloorPlan()->setDeviceAlert(dev.id, false);
+        }
+        else if (status == 2) {
+            // TIMEOUT -> Красный, мигает (Алерт!)
+            m_deviceInfoWidget->getFloorPlan()->setDeviceAlert(dev.id, true);
+        }
+        else {
+            // DISABLED -> Просто красный или серый, не мигает
+            m_deviceInfoWidget->getFloorPlan()->setDeviceDisabled(dev.id);
+        }
     }
+
+    m_model->updateDeviceStatuses();
 }
 
 MainWindow::~MainWindow()
@@ -195,27 +206,43 @@ void MainWindow::showContextMenu(const QPoint& pos)
     else if (isDevice) {
         int deviceId = index.data(Qt::UserRole).toInt();
 
-        // --- НОВАЯ ЛОГИКА: Поиск на карте ---
-        QAction* findAction = menu.addAction("Показать на планировке");
+        bool isOnline = DatabaseManager::instance().isDeviceOnline(deviceId);
+        QString toggleText = isOnline ? "Выключить устройство" : "Включить устройство";
+        QAction* toggleAction = menu.addAction(toggleText);
 
-        // Проверяем, добавлено ли устройство на карту
+        connect(toggleAction, &QAction::triggered, [this, deviceId, isOnline]() {
+            bool newState = !isOnline; // Инвертируем статус
+            DatabaseManager::instance().setDeviceOnline(deviceId, newState);
+            QString mac = DatabaseManager::instance().getDeviceMac(deviceId);
+            if (!mac.isEmpty() && m_mqttClient->state() == QMqttClient::Connected) {
+                QJsonObject json;
+                json["command"] = newState ? "ON" : "OFF";
+                QJsonDocument doc(json);
+                QString topic = QString("devices/%1/control").arg(mac);
+                m_mqttClient->publish(QMqttTopicName(topic), doc.toJson());
+            }
+            m_deviceInfoWidget->getFloorPlan()->setDeviceAlert(deviceId, !newState);
+            DatabaseManager::instance().updateLastSeen(deviceId);
+            m_deviceInfoWidget->updateData();
+            m_model->updateDeviceStatuses();
+            });
+
+        QAction* findAction = menu.addAction("Показать на планировке");
         bool onMap = m_deviceInfoWidget->getFloorPlan()->hasDevice(deviceId);
         findAction->setEnabled(onMap); // Если нет на сцене - кнопка неактивна
-
         if (onMap) {
             connect(findAction, &QAction::triggered, [this, deviceId]() {
                 m_deviceInfoWidget->getFloorPlan()->centerOnDevice(deviceId);
                 });
         }
         menu.addSeparator();
-        // ------------------------------------
 
         QAction* configAction = menu.addAction("Настроить устройство");
         connect(configAction, &QAction::triggered, [this, deviceId]() {
             ConfigureDeviceDialog dialog(deviceId, this);
             if (dialog.exec() == QDialog::Accepted) {
                 m_model->refreshStructure();
-                subscribeToAllDevices(); // убедитесь, что метод доступен
+                subscribeToAllDevices(); 
             }
             });
     }
@@ -302,7 +329,7 @@ void MainWindow::handleMqttMessage(const QString& topic, const QByteArray& paylo
     QJsonObject obj = doc.object();
 
     int deviceId = DatabaseManager::instance().getOrCreateDevice(deviceMac);
-
+    DatabaseManager::instance().updateLastSeen(deviceId);
     subscribeToDevice(deviceId);
 
     if (messageType == "alerts") {

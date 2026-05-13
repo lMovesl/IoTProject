@@ -251,19 +251,32 @@ void DatabaseManager::processCombinedJson(const QString& uniqueId, const QByteAr
     }
 }
 
-bool DatabaseManager::isDeviceOnline(int deviceId, int timeoutSeconds) {
-    QSqlQuery q(m_db);
-    q.prepare("SELECT timestamp FROM sensor_data sd "
-        "JOIN sensors s ON sd.sensor_id = s.id "
-        "WHERE s.device_id = ? ORDER BY sd.timestamp DESC LIMIT 1");
-    q.addBindValue(deviceId);
 
-    if (q.exec() && q.next()) {
-        QDateTime lastSeen = q.value(0).toDateTime();
-        lastSeen.setTimeZone(QTimeZone::LocalTime); 
-        return lastSeen.secsTo(QDateTime::currentDateTime()) < timeoutSeconds;
+
+int DatabaseManager::getDeviceStatus(int deviceId) {
+    QSqlQuery query(m_db);
+    // Берем флаг включения и время последней активности
+    query.prepare("SELECT is_online, last_seen FROM devices WHERE id = :id");
+    query.bindValue(":id", deviceId);
+
+    if (query.exec() && query.next()) {
+        bool isEnabled = query.value(0).toBool();
+        QDateTime lastSeen = query.value(1).toDateTime();
+
+        // 1. Если устройство выключено пользователем
+        if (!isEnabled) {
+            return 0; // "Выключено" (Серый/Красный без мигания)
+        }
+
+        // 2. Проверяем таймаут (например, 15 секунд)
+        if (lastSeen.secsTo(QDateTime::currentDateTime()) < 15) {
+            return 1; // "В сети" (Зеленый)
+        }
+        else {
+            return 2; // "Таймаут/Потеряно" (Красный + мигание)
+        }
     }
-    return false;
+    return -1; // Не найдено
 }
 
 QList<DeviceInfo> DatabaseManager::getAllDevices() {
@@ -300,6 +313,47 @@ int DatabaseManager::getDeviceIdByMac(const QString& mac) {
 
     qDebug() << "Устройство с MAC" << mac << "не найдено в базе.";
     return -1;
+}
+
+bool DatabaseManager::isDeviceOnline(int deviceId) {
+    if (!m_db.isOpen()) return false;
+
+    QSqlQuery query(m_db);
+    query.prepare("SELECT is_online FROM devices WHERE id = :id");
+    query.bindValue(":id", deviceId);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toBool();
+    }
+    return false; // Если устройства нет или ошибка, считаем выключенным
+}
+
+void DatabaseManager::setDeviceOnline(int deviceId, bool isOnline) {
+    if (!m_db.isOpen()) return;
+
+    QSqlQuery query(m_db);
+    // Теперь колонка is_online точно существует
+    query.prepare("UPDATE devices SET is_online = :status WHERE id = :id");
+    query.bindValue(":status", isOnline ? 1 : 0);
+    query.bindValue(":id", deviceId);
+
+    if (!query.exec()) {
+        qDebug() << "Ошибка при смене статуса устройства:" << query.lastError().text();
+    }
+}
+
+QString DatabaseManager::getDeviceMac(int deviceId) {
+    if (!m_db.isOpen()) return "";
+
+    QSqlQuery query(m_db);
+    // В вашей таблице MAC-адрес хранится в unique_id
+    query.prepare("SELECT unique_id FROM devices WHERE id = :id");
+    query.bindValue(":id", deviceId);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toString();
+    }
+    return "";
 }
 
 SensorInfo DatabaseManager::getSensorSettings(int sensorId) {
@@ -379,6 +433,13 @@ QList<AlertRecord> DatabaseManager::getAlertHistory(int limit) {
         }
     }
     return list;
+}
+
+void DatabaseManager::updateLastSeen(int deviceId) {
+    QSqlQuery q(m_db);
+    q.prepare("UPDATE devices SET last_seen = CURRENT_TIMESTAMP WHERE id = :id");
+    q.bindValue(":id", deviceId);
+    q.exec();
 }
 
 double DatabaseManager::predictFutureValue(int sensorId, int futureSeconds, int pointsCount) {

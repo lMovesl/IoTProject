@@ -50,7 +50,7 @@ void UptimeTimelineWidget::paintEvent(QPaintEvent* event) {
     qint64 totalDuration = m_rangeEnd - m_rangeStart;
 
     QRect barRect(leftMargin, topMargin, barWidth, barHeight);
-    painter.fillRect(barRect, QColor(180, 180, 180));
+    painter.fillRect(barRect, QColor(217, 83, 79));
 
     for (const auto& status : m_data) {
         qint64 start = qMax(status.startTimestamp, m_rangeStart);

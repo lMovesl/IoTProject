@@ -34,21 +34,6 @@ void DeviceItem::hoverEnterEvent(QGraphicsSceneHoverEvent* event) {
     QGraphicsEllipseItem::hoverEnterEvent(event);
 }
 
-void DeviceItem::setAlert(bool active) {
-    if (active) {
-        setBrush(QColor(231, 76, 60)); // Красный
-        if (m_blinkAnim->state() != QAbstractAnimation::Running) {
-            m_blinkAnim->start();
-        }
-    }
-    else {
-        setBrush(QColor(46, 204, 113)); // Зеленый
-        m_blinkAnim->stop();
-        setOpacity(1.0); // Сброс прозрачности в норму
-    }
-    update();
-}
-
 void DeviceItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
     QMenu menu;
     QAction* infoAction = menu.addAction("Показать информацию");
@@ -59,4 +44,25 @@ void DeviceItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
         });
 
     menu.exec(event->screenPos());
+}
+
+void DeviceItem::setDisabledState() {
+    m_blinkAnim->stop(); // Останавливаем мигание
+    setOpacity(0.5);     // Делаем полупрозрачным
+    setBrush(QColor(127, 140, 141)); // Серый цвет (Disabled)
+    update();
+}
+
+void DeviceItem::setAlert(bool active) {
+    setOpacity(1.0);
+    if (active) {
+        setBrush(QColor(231, 76, 60)); // Ярко-красный
+        if (m_blinkAnim->state() != QAbstractAnimation::Running)
+            m_blinkAnim->start();
+    }
+    else {
+        setBrush(QColor(46, 204, 113)); // Зеленый
+        m_blinkAnim->stop();
+    }
+    update();
 }

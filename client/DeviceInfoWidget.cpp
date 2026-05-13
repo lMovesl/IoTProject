@@ -143,6 +143,35 @@ void DeviceInfoWidget::updateData() {
     qint64 start = end - m_currentIntervalSeconds;
 
     QVector<DeviceStateInterval> history = fetchDeviceUptime(m_currentDeviceId, start, end);
+    int currentStatus = DatabaseManager::instance().getDeviceStatus(m_currentDeviceId);
+    bool isCurrentlyOnline = (currentStatus == 1);
+
+    if (history.isEmpty()) {
+        history.append({ start, end, isCurrentlyOnline });
+    }
+    else {
+        // Если прибор ВЫКЛЮЧЕН, убеждаемся, что последний сегмент красный
+        if (!isCurrentlyOnline) {
+            // Если последний сегмент был зеленым, мы его закрываем текущим временем
+            if (history.last().isOnline) {
+                qint64 lastDataTime = history.last().endTimestamp;
+                history.append({ lastDataTime, end, false });
+            }
+            else {
+                // Если он и так был красным, просто продлеваем до края
+                history.last().endTimestamp = end;
+            }
+        }
+        else {
+            // Если прибор ВКЛЮЧЕН, работаем как раньше
+            if (history.last().isOnline == isCurrentlyOnline) {
+                history.last().endTimestamp = end;
+            }
+            else {
+                history.append({ history.last().endTimestamp, end, isCurrentlyOnline });
+            }
+        }
+    }
 
     m_timelineWidget->setDeviceName("Время в сети");
     m_timelineWidget->setData(history, start, end);
@@ -330,7 +359,7 @@ QVector<DeviceStateInterval> DeviceInfoWidget::fetchDeviceUptime(int deviceId, q
 
     if (!q.exec()) return intervals;
 
-    const qint64 TIMEOUT = 300; 
+    const qint64 TIMEOUT = 15; 
     qint64 currentStart = -1;
     qint64 prevTime = -1;
 
@@ -340,36 +369,54 @@ QVector<DeviceStateInterval> DeviceInfoWidget::fetchDeviceUptime(int deviceId, q
         if (currentStart == -1) {
             currentStart = time;
             if (currentStart - rangeStart > TIMEOUT) {
-                intervals.append({ rangeStart, currentStart, false }); // Красный
+                intervals.append({ rangeStart, currentStart, false }); 
             }
         }
         else {
-            // Проверяем разницу с предыдущим пакетом
             if (time - prevTime > TIMEOUT) {
-                // Закрываем зеленую зону (от старта до момента обрыва)
                 intervals.append({ currentStart, prevTime, true });
-                // Добавляем красную зону (время, пока не было пакетов)
                 intervals.append({ prevTime, time, false });
-                // Начинаем новую зеленую зону с текущей точки
                 currentStart = time;
             }
         }
         prevTime = time;
     }
+    int currentStatus = DatabaseManager::instance().getDeviceStatus(deviceId);
+    bool isCurrentlyOnline = (currentStatus == 1);
 
-    // Закрываем последний кусок до правого края графика
     if (currentStart != -1) {
-        if (rangeEnd - prevTime > TIMEOUT) {
-            // Устройство отвалилось до конца периода
+        // Вычисляем, как давно была последняя запись
+        qint64 timeSinceLastData = rangeEnd - prevTime;
+
+        if (!isCurrentlyOnline) {
+            // Если выключено — всё после последних данных красное
             intervals.append({ currentStart, prevTime, true });
             intervals.append({ prevTime, rangeEnd, false });
         }
         else {
-            intervals.append({ currentStart, rangeEnd, true });
+            // Если включено, но данных долго не было (например, больше 30 секунд)
+            // мы НЕ рисуем зеленую линию через весь пустой участок
+            if (timeSinceLastData > TIMEOUT) { // порог 30 секунд вместо 300
+                intervals.append({ currentStart, prevTime, true });
+                // Весь простой до момента включения (сейчас) будет красным
+                intervals.append({ prevTime, rangeEnd - 1, false });
+                // И только самый кончик (текущий момент) — зеленым
+                intervals.append({ rangeEnd - 1, rangeEnd, true });
+            }
+            else {
+                intervals.append({ currentStart, rangeEnd, true });
+            }
         }
     }
     else {
-        intervals.append({ rangeStart, rangeEnd, false });
+        // Если данных вообще нет в интервале, но статус Online — рисуем только точку в конце
+        if (isCurrentlyOnline) {
+            intervals.append({ rangeStart, rangeEnd - 1, false });
+            intervals.append({ rangeEnd - 1, rangeEnd, true });
+        }
+        else {
+            intervals.append({ rangeStart, rangeEnd, false });
+        }
     }
 
     return intervals;

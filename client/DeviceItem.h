@@ -15,7 +15,7 @@ public:
 
     int id() const { return m_id; }
     void setAlert(bool active);
-
+    void setDisabledState();
 signals:
     void positionChanged(int id, QPointF newPos);
     void showInfoRequested(int id, const QString& name);

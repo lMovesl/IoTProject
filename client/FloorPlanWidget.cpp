@@ -1,4 +1,5 @@
 ﻿#include "FloorPlanWidget.h"
+#include "FloorPlanWidget.h"
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QDebug>
@@ -36,6 +37,12 @@ void FloorPlanWidget::centerOnDevice(int id) {
         flash->setEndValue(0.0);
         flash->setLoopCount(4); // Мигнет 2 раза туда-обратно
         flash->start(QAbstractAnimation::DeleteWhenStopped);
+    }
+}
+
+void FloorPlanWidget::setDeviceDisabled(int id) {
+    if (m_deviceItems.contains(id)) {
+        m_deviceItems[id]->setDisabledState();
     }
 }
 

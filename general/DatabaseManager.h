@@ -70,7 +70,6 @@ public:
     int getOrCreateDevice(const QString& uniqueId);
     int getOrCreateSensor(int deviceId, const QString& key, const QString& unit = "?");
     void processCombinedJson(const QString& uniqueId, const QByteArray& jsonData);
-    bool isDeviceOnline(int deviceId, int timeoutSeconds = 300);
     QList<DeviceInfo> getAllDevices();
     void updateDevicePosition(int id, double x, double y);
     bool saveAlert(int sensorId, const QString& type, double value);
@@ -81,6 +80,11 @@ public:
     bool updateSensorThresholds(int sensorId, const QVariant& minLimit, const QVariant& maxLimit, const QVariant& maxRate);
     QList<MeasurementEntry> getAllMeasurementsHistory(int limit);
     double predictFutureValue(int sensorId, int futureSeconds = 300, int pointsCount = 10);
+    QString getDeviceMac(int deviceId);
+    void setDeviceOnline(int deviceId, bool isOnline);
+    bool isDeviceOnline(int deviceId);
+    int getDeviceStatus(int deviceId);
+    void updateLastSeen(int deviceId);
 private:
     explicit DatabaseManager(QObject* parent = nullptr);
     QSqlDatabase m_db;
