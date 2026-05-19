@@ -9,12 +9,12 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QSpinBox>
+#include <QDialog>
 
-class MQTTConnectionManager : public QWidget {
+class MQTTConnectionManager : public QDialog {
 	Q_OBJECT
 public:
-	MQTTConnectionManager(QWidget* parent = nullptr);
-	//const * const?
+	MQTTConnectionManager(QMqttClient* client, QWidget* parent = nullptr);
 	QMqttClient* getMqttClient() const;
 private:
 	QMqttClient* m_pmqttClient = nullptr;
@@ -24,23 +24,18 @@ private:
 	bool m_bSecure = false;
 
 	QLineEdit* m_pleHost = nullptr;
-	QLineEdit* m_pleTopicName = nullptr;
 	QSpinBox* m_psbPort = nullptr;
 	QComboBox* m_pcbProtocol = nullptr;
 	QPushButton* m_pbtnConnect = nullptr;
-	QPushButton* m_pbtnTopicSubscribe = nullptr;
-	QCheckBox* m_pchbSecure = nullptr;
-	//QCheckBox* m_pchbWebSockets = nullptr;
 	QPlainTextEdit* m_ppteLogMessages = nullptr;
-	//delete
-	QSet<QMqttSubscription*> m_setSubscriptions;
+
+	void loadSettingsFromClient(); // Метод для загрузки конфигурации
+	void saveSettings();
+private slots:
+	void updateUiStates();
 public slots:
 	void onBtnConnectClick();
-	void onBtnSubscribeClick();
-	void onMessageReceived(const QByteArray& message, const QMqttTopicName& topic);
-	void onDisconnectBroker();
 	void setClientPort(int port);
-	void handleSubscribeState(QMqttSubscription::SubscriptionState);
 signals:
 	void subscriptionMessageReceive(QMqttMessage);
 };

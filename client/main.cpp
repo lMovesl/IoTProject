@@ -6,6 +6,10 @@ int main(int argc, char* argv[]) {
 	std::setlocale(LC_ALL, "RU");
 	
 	QApplication app(argc, argv);
+
+	QApplication::setOrganizationName("SmartHomeIOT");
+	QApplication::setApplicationName("IOTClient");
+
 	MainWindow* mainWindow = new MainWindow();
 	mainWindow->showMaximized();
 	app.exec();

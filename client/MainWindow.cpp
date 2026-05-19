@@ -27,12 +27,16 @@ MainWindow::MainWindow(QWidget* parent)
     m_mqttClient->setPort(1883);
 
     connect(m_mqttClient, &QMqttClient::connected, this, [this]() {
-        m_mqttClient->subscribe(QMqttTopicFilter("devices/+/alerts"));
-        qDebug() << "MQTT клиент подключен";
-    });
-    connect(m_mqttClient, &QMqttClient::disconnected, this, []() {
-        qDebug() << "MQTT клиент отключен";
-    });
+        qDebug() << "MQTT клиент подключен. ";
+        subscribeToAllDevices(); 
+        });
+
+    connect(m_mqttClient, &QMqttClient::disconnected, this, [this]() {
+        qDebug() << "MQTT клиент отключен.";
+        m_deviceTopics.clear();
+        m_deviceTopicsAlerts.clear();
+        });
+
     connect(m_mqttClient, &QMqttClient::messageReceived, this, &MainWindow::handleAlertMessage);
     connect(m_mqttClient, &QMqttClient::messageReceived, this,
             [this](const QByteArray& payload, const QMqttTopicName& topic) {
@@ -59,7 +63,11 @@ MainWindow::MainWindow(QWidget* parent)
     QAction* loadPlanAction = viewMenu->addAction("Загрузить планировку...");
     loadPlanAction->setShortcut(QKeySequence("Ctrl+O"));
 
+    QMenu* settingsMenu = new QMenu("Настройки", menubar);
+    QAction* connectionSettingsAction = settingsMenu->addAction("Настройки подключения");
+
     connect(loadPlanAction, &QAction::triggered, this, &MainWindow::onSelectFloorPlan);
+    connect(connectionSettingsAction, &QAction::triggered, this, &MainWindow::showMqttSettings);
     connect(m_deviceInfoWidget->getFloorPlan(), &FloorPlanWidget::deviceSelected,
         this, [this](int id, const QString& name) {
             m_deviceInfoWidget->setDevice(id, name);
@@ -69,11 +77,11 @@ MainWindow::MainWindow(QWidget* parent)
     setMenuBar(menubar);
     menubar->addMenu(menu);
     menubar->addMenu(viewMenu);
+    menubar->addMenu(settingsMenu);
     menu->addAction(measurmentsHistoryAction);
     menu->addAction(alertsHistoryAction);
 
     m_model->refreshStructure();
-    subscribeToAllDevices();
     m_treeView->expandToDepth(0);
 
     m_treeView->setDragEnabled(true);
@@ -287,24 +295,45 @@ void MainWindow::showContextMenu(const QPoint& pos)
     menu.exec(m_treeView->viewport()->mapToGlobal(pos));
 }
 
-void MainWindow::subscribeToDevice(int deviceId)
+void MainWindow::subscribeToDevice(QString uniqueId)
 {
-    QString topic = QStringLiteral("devices/%1/data").arg(deviceId);
-    if (!m_deviceTopics.contains(deviceId)) {
-        m_deviceTopics[deviceId] = topic;
-        m_mqttClient->subscribe(topic);
-        qDebug() << "Подписались на топик:" << topic;
+    if (!m_deviceTopics.contains(uniqueId)) {
+        // Формируем строки топиков для данных и алертов
+        QString dataTopic = QString("devices/%1/data").arg(uniqueId);
+        QString alertTopic = QString("devices/%1/alerts").arg(uniqueId);
+
+        // Сохраняем в мапы для отслеживания
+        m_deviceTopics[uniqueId] = dataTopic;
+        m_deviceTopicsAlerts[uniqueId] = alertTopic;
+
+        // Подписываемся только на них
+        m_mqttClient->subscribe(dataTopic);
+        m_mqttClient->subscribe(alertTopic);
+
+        qDebug() << "Подписались на топики устройства" << uniqueId << ": data, alerts";
     }
 }
 
 void MainWindow::subscribeToAllDevices()
 {
-    QMapIterator<int, QString> it(m_deviceTopics);
-    while (it.hasNext()) {
-        it.next();
-        m_mqttClient->unsubscribe(it.value());
+    if (m_mqttClient->state() == QMqttClient::Connected) {
+        // Отписка от топиков data
+        QMapIterator<QString, QString> itData(m_deviceTopics);
+        while (itData.hasNext()) {
+            itData.next();
+            m_mqttClient->unsubscribe(itData.value());
+        }
+
+        // Отписка от топиков alerts
+        QMapIterator<QString, QString> itAlerts(m_deviceTopicsAlerts);
+        while (itAlerts.hasNext()) {
+            itAlerts.next();
+            m_mqttClient->unsubscribe(itAlerts.value());
+        }
     }
+
     m_deviceTopics.clear();
+    m_deviceTopicsAlerts.clear();
 
     if (!DatabaseManager::instance().open()) return;
     QList<DeviceInfo> devices = DatabaseManager::instance().getDevicesByRoom(0); 
@@ -317,7 +346,7 @@ void MainWindow::subscribeToAllDevices()
     for (const DeviceInfo& dev : devices) {
         if (!seen.contains(dev.id)) {
             seen.insert(dev.id);
-            subscribeToDevice(dev.id);
+            subscribeToDevice(dev.uniqueId);
         }
     }
 }
@@ -342,7 +371,7 @@ void MainWindow::handleMqttMessage(const QString& topic, const QByteArray& paylo
 
     int deviceId = DatabaseManager::instance().getOrCreateDevice(deviceMac);
     DatabaseManager::instance().updateLastSeen(deviceId);
-    subscribeToDevice(deviceId);
+    subscribeToDevice(deviceMac);
 
     if (messageType == "alerts") {
         return;
@@ -437,4 +466,13 @@ void MainWindow::onSelectFloorPlan() {
         QSettings settings("MyCompany", "IoTSystem");
         settings.setValue("floorPlanPath", fileName);
     }
+}
+
+void MainWindow::showMqttSettings() {
+    if (!m_mqttDialog) {
+        m_mqttDialog = new MQTTConnectionManager(m_mqttClient ,this);
+    }
+    m_mqttDialog->show();
+    m_mqttDialog->raise();
+    m_mqttDialog->activateWindow();
 }

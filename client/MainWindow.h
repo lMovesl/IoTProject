@@ -15,6 +15,7 @@
 #include "DeviceInfoWidget.h"
 #include "DatabaseManager.h"
 #include "DeviceTreeModel.h"
+#include "MQTTConnectionManager.h"
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -32,22 +33,26 @@ private slots:
     void onSelectFloorPlan();
     void updateAllVisualStatuses();
     void performFullUpdate();
+    void showMqttSettings();
 private:
+
     QTreeView* m_treeView;
     QDockWidget* m_dock;
 
     DeviceTreeModel* m_model;
     QTimer* m_refreshTimer;
     QMqttClient* m_mqttClient;
+    MQTTConnectionManager* m_mqttDialog = nullptr;
     DeviceInfoWidget* m_deviceInfoWidget;
 
     QListWidget* m_alertLog;
 
-    QMap<int, QString> m_deviceTopics;
+    QMap<QString, QString> m_deviceTopics;
+    QMap<QString, QString> m_deviceTopicsAlerts;
     QMap<int, class SensorGraphWindow*> m_openGraphs;
 
     void setupLayout(); 
-    void subscribeToDevice(int deviceId);
+    void subscribeToDevice(QString uniqueId);
     void subscribeToAllDevices();
 };
 

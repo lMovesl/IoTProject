@@ -6,71 +6,56 @@
 #include <QMessageBox>
 #include <QGroupBox>
 #include <QMetaEnum>
+#include <QSettings>
 
-MQTTConnectionManager::MQTTConnectionManager(QWidget* parent) : QWidget(parent) {
-	m_pmqttClient = new QMqttClient(this);
+MQTTConnectionManager::MQTTConnectionManager(QMqttClient* client, QWidget* parent) : QDialog(parent) {
+	m_pmqttClient = client;
 	QLabel* lblHost = new QLabel("Host", this);
 	QLabel* lblPort = new QLabel("Port", this);
-	QLabel* lblTopicName = new QLabel("Topic name", this);
 	QLabel* lblLogMessages = new QLabel("Log messages", this);
 	QLabel* lblProtocol = new QLabel("Protocol", this);
 	QLabel* lblState = new QLabel("Connection state:", this);
 	QLabel* lblCurrentState = new QLabel("", this);
 	m_pleHost = new QLineEdit("test.mosquitto.org", this);
 	m_psbPort = new QSpinBox(this);
-	m_pleTopicName = new QLineEdit(this);
-	m_pchbSecure = new QCheckBox("Secure", this);
-	//m_pchbWebSockets = new QCheckBox("WebSockets", this);
 	m_pcbProtocol = new QComboBox(this);
 	m_pbtnConnect = new QPushButton("Connect", this);
 	m_ppteLogMessages = new QPlainTextEdit(this);
-	//unsubscribe combobox
-	m_pbtnTopicSubscribe = new QPushButton("Subscribe", this);
 	QGroupBox* groupConnectionSettings = new QGroupBox("Connection settings", this);
 
 	QVBoxLayout* mainLayout = new QVBoxLayout(this);
 	QGridLayout* connectionSettingsLayout = new QGridLayout(groupConnectionSettings);
-	QHBoxLayout* tempLayout = new QHBoxLayout; //todo delete this
 	QHBoxLayout* stateLayout = new QHBoxLayout;
 
 	connectionSettingsLayout->addWidget(lblHost, 0, 0);
 	connectionSettingsLayout->addWidget(m_pleHost, 0, 1);
 	connectionSettingsLayout->addWidget(lblPort, 1, 0);
 	connectionSettingsLayout->addWidget(m_psbPort, 1, 1);
-	connectionSettingsLayout->addWidget(m_pchbSecure, 2, 0);
 	connectionSettingsLayout->addWidget(lblProtocol, 3, 0);
 	connectionSettingsLayout->addWidget(m_pcbProtocol, 3, 1);
 
 	stateLayout->addWidget(lblState);
 	stateLayout->addWidget(lblCurrentState, Qt::AlignLeft);
 
-	tempLayout->addWidget(lblTopicName);
-	tempLayout->addWidget(m_pleTopicName);
-	tempLayout->addWidget(m_pbtnTopicSubscribe);
-
 	mainLayout->addWidget(groupConnectionSettings);
 	mainLayout->addLayout(stateLayout);
 	mainLayout->addWidget(m_pbtnConnect);
-	mainLayout->addLayout(tempLayout);
 	mainLayout->addStretch(1);
 	mainLayout->addWidget(lblLogMessages, Qt::AlignLeft);
 	mainLayout->addWidget(m_ppteLogMessages);
 	
-	connect(m_pmqttClient, &QMqttClient::disconnected, this, &MQTTConnectionManager::onDisconnectBroker);
-	//connect(m_pmqttClient, &QMqttClient::messageReceived, this, &MQTTConnectionManager::onMessageReceived);
+	connect(m_pmqttClient, &QMqttClient::disconnected, this, &MQTTConnectionManager::updateUiStates);
 	connect(m_psbPort, &QSpinBox::valueChanged, this, &MQTTConnectionManager::setClientPort);
 	connect(m_pbtnConnect, &QPushButton::clicked, this, &MQTTConnectionManager::onBtnConnectClick);
-	connect(m_pbtnTopicSubscribe, &QPushButton::clicked, this, &MQTTConnectionManager::onBtnSubscribeClick);
-	connect(m_pchbSecure, &QCheckBox::checkStateChanged, this, [this] { m_bSecure = m_pchbSecure->isChecked(); });
-	//connect(m_pchbWebSockets, &QCheckBox::checkStateChanged, this, [this] {m_bWebSockets = m_pchbWebSockets->isChecked(); });
 	connect(m_pcbProtocol, &QComboBox::currentIndexChanged, this, [this] (int ind) {
 		m_protocolVersion = static_cast<QMqttClient::ProtocolVersion>(ind + 3);
 	});
 	connect(m_pmqttClient, &QMqttClient::errorChanged, this, [this](QMqttClient::ClientError error) {
 			m_ppteLogMessages->appendPlainText("MQTT error: " + QString::number(error));
 	});
-	connect(m_pmqttClient, &QMqttClient::stateChanged, this, [lblCurrentState] (QMqttClient::ClientState state) {
+	connect(m_pmqttClient, &QMqttClient::stateChanged, this, [this, lblCurrentState] (QMqttClient::ClientState state) {
 		lblCurrentState->setText(QMetaEnum::fromType<QMqttClient::ClientState>().valueToKey(state));
+		updateUiStates();
 		});
 
 	m_ppteLogMessages->setReadOnly(true);
@@ -85,6 +70,8 @@ MQTTConnectionManager::MQTTConnectionManager(QWidget* parent) : QWidget(parent) 
 	m_pmqttClient->emit stateChanged(m_pmqttClient->state());
 
 	resize(500, 400);
+
+	loadSettingsFromClient();
 }
 
 QMqttClient* MQTTConnectionManager::getMqttClient() const {
@@ -92,101 +79,74 @@ QMqttClient* MQTTConnectionManager::getMqttClient() const {
 }
 
 void MQTTConnectionManager::onBtnConnectClick() {
-	m_pmqttClient->setHostname(m_pleHost->text());
-	m_pmqttClient->setPort(m_uiPort);
+	if (!m_pmqttClient) return;
 
 	if (m_pmqttClient->state() == QMqttClient::Disconnected) {
-		m_pleHost->setEnabled(false);
-		m_psbPort->setEnabled(false);
-		m_pchbSecure->setEnabled(false);
-		m_pcbProtocol->setEnabled(false);
+		m_pmqttClient->setHostname(m_pleHost->text().trimmed());
+		m_pmqttClient->setPort(static_cast<quint16>(m_psbPort->value()));
 
-		m_pmqttClient->setProtocolVersion(m_protocolVersion);
+		saveSettings();
 
-		m_pbtnConnect->setText("Disconnect");
-
-		//update to 6.10 qt
-//		if (m_bSecure && m_bWebSockets)
-//			m_pmqttClient->connectToH
-#if !defined(QT_NO_SSL)
-		if (m_bSecure)
-			//broker.hivemq.com 8883
-			m_pmqttClient->connectToHostEncrypted({});
-#endif
-		if (!m_bSecure)
-			m_pmqttClient->connectToHost();
-
-		if (m_pmqttClient->state() == QMqttClient::Disconnected) {
-			m_pleHost->setEnabled(true);
-			m_psbPort->setEnabled(true);
-			m_pchbSecure->setEnabled(true);
-			m_pcbProtocol->setEnabled(true);
-
-			m_pbtnConnect->setText("Connect");
-			m_pmqttClient->disconnectFromHost();
-		}
+		m_pbtnConnect->setText("Disconnect"); 
+		m_pmqttClient->connectToHost();
 	}
 	else {
-		m_pleHost->setEnabled(true);
-		m_psbPort->setEnabled(true);
-		m_pchbSecure->setEnabled(true);
-		m_pcbProtocol->setEnabled(true);
-
-		m_pbtnConnect->setText("Connect");
 		m_pmqttClient->disconnectFromHost();
+		m_pbtnConnect->setText("Connect");
 	}
-}
-
-void MQTTConnectionManager::onBtnSubscribeClick() {
-	using Qt::StringLiterals::operator ""_s;
-
-	auto subscription = m_pmqttClient->subscribe(m_pleTopicName->text());
-	if (!subscription) 
-		QMessageBox::critical(this, u"Error"_s, u"Could not a subscribe"_s);
-	else if (!m_setSubscriptions.contains(subscription))
-	{
-		m_setSubscriptions.insert(subscription);
-		connect(subscription, &QMqttSubscription::stateChanged, this, &MQTTConnectionManager::handleSubscribeState);
-		connect(subscription, &QMqttSubscription::messageReceived, this, &MQTTConnectionManager::subscriptionMessageReceive);
-	}
-}
-
-void MQTTConnectionManager::onMessageReceived(const QByteArray& message, const QMqttTopicName& topic) {
-	//m_ppteLogMessages->insertPlainText(QDateTime::currentDateTime().toString() +
-	//	" Received topic:" + topic.name() +
-	//	" Message: " + message +
-	//	"\n"
-	//);
-
-	qDebug() << QDateTime::currentDateTime().toString() << topic.name();
-}
-
-void MQTTConnectionManager::onDisconnectBroker() {
-	m_setSubscriptions.clear();
-
-	m_pleHost->setEnabled(true);
-	m_psbPort->setEnabled(true);
-	m_pchbSecure->setEnabled(true);
-	m_pcbProtocol->setEnabled(true);
-
-	m_pbtnConnect->setText("Connect");
 }
 
 void MQTTConnectionManager::setClientPort(int port) {
 	m_uiPort = static_cast<quint16>(port);
 }
 
-void MQTTConnectionManager::handleSubscribeState(QMqttSubscription::SubscriptionState subscriptionState) {
-	auto subscription = dynamic_cast<QMqttSubscription*>(sender());
-	switch (subscriptionState)
-	{
-	case QMqttSubscription::Unsubscribed:
-	case QMqttSubscription::Error:
-		qDebug() << static_cast<quint8>(subscription->reasonCode());
-		m_setSubscriptions.remove(subscription);
-		delete subscription;
-		break;
-	default:
-		break;
+void MQTTConnectionManager::saveSettings() {
+	QSettings settings("YourOrganization", "IoTMonitoringSystem");
+	settings.beginGroup("MQTT");
+	settings.setValue("host", m_pleHost->text().trimmed());
+	settings.setValue("port", m_psbPort->value());
+	settings.setValue("protocol", m_pcbProtocol->currentIndex());
+	settings.endGroup();
+}
+
+void MQTTConnectionManager::loadSettingsFromClient() {
+	if (!m_pmqttClient) return;
+
+	m_pleHost->setText(m_pmqttClient->hostname());
+	m_psbPort->setValue(m_pmqttClient->port());
+
+	if (m_pmqttClient->protocolVersion() == QMqttClient::MQTT_3_1) {
+		m_pcbProtocol->setCurrentIndex(0); 
+	}
+	else if (m_pmqttClient->protocolVersion() == QMqttClient::MQTT_3_1_1) {
+		m_pcbProtocol->setCurrentIndex(1);
+	}
+	else if (m_pmqttClient->protocolVersion() == QMqttClient::MQTT_5_0) {
+		m_pcbProtocol->setCurrentIndex(2);
+	}
+	QString clientId = m_pmqttClient->clientId();
+	QString username = m_pmqttClient->username();
+
+	m_pmqttClient->emit stateChanged(m_pmqttClient->state());
+}
+
+void MQTTConnectionManager::updateUiStates() {
+	if (!m_pmqttClient) return;
+
+	bool isConnected = (m_pmqttClient->state() == QMqttClient::Connected ||
+		m_pmqttClient->state() == QMqttClient::Connecting);
+
+	m_pleHost->setDisabled(isConnected);
+	m_psbPort->setDisabled(isConnected);
+	m_pcbProtocol->setDisabled(isConnected);
+
+	if (m_pmqttClient->state() == QMqttClient::Connected) {
+		m_pbtnConnect->setText("Disconnect");
+	}
+	else if (m_pmqttClient->state() == QMqttClient::Connecting) {
+		m_pbtnConnect->setText(tr("Connecting..."));
+	}
+	else {
+		m_pbtnConnect->setText(tr("Connect"));
 	}
 }
